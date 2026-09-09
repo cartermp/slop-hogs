@@ -78,62 +78,88 @@ jobs:
       RAILWAY_TOKEN: ${{ secrets.RAILWAY_TOKEN }}
       RAILWAY_PROJECT_ID: 40a3b05f-3d6c-4335-80c1-98be172d3236
       RAILWAY_ENVIRONMENT_ID: 85939c2a-0bc5-43ff-be6d-689ec1170c2f
+      RAILWAY_SERVICE_ID: 3759c81d-a107-456b-aaeb-82fdc30fec30
     steps:
       - uses: actions/checkout@11d5960a326750d5838078e36cf38b85af677262 # v4
       - uses: actions/setup-node@49933ea5288caeca8642d1e84afbd3f7d6820020 # v4
         with:
           node-version: 24.19.0
-      - name: Inspect project
+      - name: Link Railway project
         run: >-
-          npx --yes @railway/cli@5.50.2 status
+          npx --yes @railway/cli@5.50.2 link
           --project "$RAILWAY_PROJECT_ID"
           --environment "$RAILWAY_ENVIRONMENT_ID"
+          --service "$RAILWAY_SERVICE_ID"
           --json
-      - name: List deployments
-        run: >-
-          npx --yes @railway/cli@5.50.2 deployment list
-          --project "$RAILWAY_PROJECT_ID"
-          --environment "$RAILWAY_ENVIRONMENT_ID"
-          --service slop-hogs
-          --limit 5
-          --json
-      - name: List variable names
+      - name: Apply Railway configuration
         run: |
-          npx --yes @railway/cli@5.50.2 variable list \
+          npx --yes @railway/cli@5.50.2 config plan \
+            --file .railway/railway.ts \
+            --verbose
+          npx --yes @railway/cli@5.50.2 config apply \
+            --file .railway/railway.ts \
+            --yes \
+            --verbose
+      - name: Redeploy and wait
+        run: |
+          deployment() {
+            npx --yes @railway/cli@5.50.2 deployment list \
+              --project "$RAILWAY_PROJECT_ID" \
+              --environment "$RAILWAY_ENVIRONMENT_ID" \
+              --service slop-hogs \
+              --limit 1 \
+              --json
+          }
+
+          before=$(deployment | jq -r '.[0].id')
+          npx --yes @railway/cli@5.50.2 redeploy \
             --project "$RAILWAY_PROJECT_ID" \
             --environment "$RAILWAY_ENVIRONMENT_ID" \
             --service slop-hogs \
-            --json | jq --exit-status 'keys'
-          npx --yes @railway/cli@5.50.2 variable list \
-            --project "$RAILWAY_PROJECT_ID" \
-            --environment "$RAILWAY_ENVIRONMENT_ID" \
-            --service Postgres \
-            --json | jq --exit-status 'keys'
-      - name: Repair database reference
-        run: |
-          reference=$(printf '$%s' '{{Postgres.DATABASE_URL}}')
-          npx --yes @railway/cli@5.50.2 variable set \
+            --from-source \
+            --yes
+
+          id=
+          status=
+          for attempt in $(seq 1 60); do
+            latest=$(deployment)
+            id=$(printf '%s' "$latest" | jq -r '.[0].id')
+            status=$(printf '%s' "$latest" | jq -r '.[0].status')
+            if [ "$id" != "$before" ]; then
+              case "$status" in
+                SUCCESS) break ;;
+                FAILED|CRASHED|REMOVED) break ;;
+              esac
+            fi
+            sleep 5
+          done
+
+          if [ "$id" = "$before" ]; then
+            echo 'Railway did not create a new deployment'
+            exit 1
+          fi
+
+          npx --yes @railway/cli@5.50.2 logs \
             --project "$RAILWAY_PROJECT_ID" \
             --environment "$RAILWAY_ENVIRONMENT_ID" \
             --service slop-hogs \
-            "DATABASE_URL=$reference"
-      - name: Read latest build logs
+            --deployment "$id" \
+            --lines 300
+          test "$status" = SUCCESS
+      - name: Read latest Railway logs
         if: always()
-        run: >-
-          npx --yes @railway/cli@5.50.2 logs
-          --project "$RAILWAY_PROJECT_ID"
-          --environment "$RAILWAY_ENVIRONMENT_ID"
-          --service slop-hogs
-          --build
-          --latest
-          --lines 300
-      - name: Read latest deployment logs
-        if: always()
-        run: >-
-          npx --yes @railway/cli@5.50.2 logs
-          --project "$RAILWAY_PROJECT_ID"
-          --environment "$RAILWAY_ENVIRONMENT_ID"
-          --service slop-hogs
-          --deployment
-          --latest
-          --lines 300
+        run: |
+          npx --yes @railway/cli@5.50.2 logs \
+            --project "$RAILWAY_PROJECT_ID" \
+            --environment "$RAILWAY_ENVIRONMENT_ID" \
+            --service slop-hogs \
+            --build \
+            --latest \
+            --lines 300 || true
+          npx --yes @railway/cli@5.50.2 logs \
+            --project "$RAILWAY_PROJECT_ID" \
+            --environment "$RAILWAY_ENVIRONMENT_ID" \
+            --service slop-hogs \
+            --deployment \
+            --latest \
+            --lines 300 || true
