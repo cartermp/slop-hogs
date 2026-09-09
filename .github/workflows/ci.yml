@@ -97,6 +97,18 @@ jobs:
           --service slop-hogs
           --limit 5
           --json
+      - name: List variable names
+        run: |
+          npx --yes @railway/cli@5.50.2 variable list \
+            --project "$RAILWAY_PROJECT_ID" \
+            --environment "$RAILWAY_ENVIRONMENT_ID" \
+            --service slop-hogs \
+            --json | jq --exit-status 'keys'
+          npx --yes @railway/cli@5.50.2 variable list \
+            --project "$RAILWAY_PROJECT_ID" \
+            --environment "$RAILWAY_ENVIRONMENT_ID" \
+            --service Postgres \
+            --json | jq --exit-status 'keys'
       - name: Read latest build logs
         if: always()
         run: >-
