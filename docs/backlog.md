@@ -5,8 +5,8 @@ The owner assigns a bounded task; Codex implements it and returns a reviewable P
 | Task | Outcome | Prerequisites | Status |
 | --- | --- | --- | --- |
 | SH-001 | App shell, CI, policy validation, repository handoff | Repository | Complete |
-| SH-002 | Pure deterministic feeding engine | SH-001 | Implemented on this branch, pending review |
-| SH-003 | Base SVG hog and five diet appearances | SH-002 | Planned |
+| SH-002 | Pure deterministic feeding engine | SH-001 | Complete |
+| SH-003 | Base SVG hog and five diet appearances | SH-002 | Implemented on this branch, pending review |
 | SH-004 | Postgres schema and atomic persistence | SH-002 | Planned |
 | SH-005 | Minimal-scope Bluesky OAuth | SH-004 | Planned |
 | SH-006 | Railway setup, budgets, backup and restore | SH-001, SH-004, SH-005 | Planned; before public exposure |
@@ -19,10 +19,10 @@ The owner assigns a bounded task; Codex implements it and returns a reviewable P
 
 ## Current handoff
 
-SH-002 adds pure, versioned game transitions for five foods, elapsed hunger, six regenerating meal slots, taste, and deterministic digestion. The engine has no database, UI, network access, or paid integration.
+SH-003 adds a modular base hog, five diet appearances, and a development-only gallery backed by real six-meal game states. The public shell now shows the unmutated hog. The art uses repository-owned SVG and CSS.
 
-Run `npm ci`, `npm run check`, `npm run build`, `npm run smoke`, and `npm run simulate` to reproduce validation and inspect the five diet outcomes.
+Run `npm ci`, `npm run check`, `npm run build`, and `npm run smoke` to reproduce automated validation. Run `npm run dev`, then open `/gallery` to compare the five appearances at desktop and phone widths.
 
-## SH-002 acceptance
+## SH-003 acceptance
 
-Implement the game as a pure module with explicit saved state, validated action, server time, deterministic random state, and rules version. Return next state and events. Cover meal capacity, elapsed-time behavior, and distinct diet outcomes. No database, UI, network, or new service is needed. Keep mutation art and full mutation recipes in their later tasks.
+Render one recognizable base hog and five clearly different diet builds using modular SVG parts for body, eyes, mouth, outfit, back attachment, and effects. Provide a local gallery that shows real six-meal game states and works at desktop and phone widths. Keep the gallery out of production. Add no image service or runtime dependency.

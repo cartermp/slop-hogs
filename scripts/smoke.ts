@@ -31,8 +31,11 @@ try {
   assert.equal(response.status, 200);
   const html = await response.text();
   assert.match(html, /Slop Hogs/);
-  assert.match(html, /The pen is under construction/);
+  assert.match(html, /data-hog-variant="base"/);
+  assert.match(html, /Your hog is almost ready/);
   assert.equal(response.headers.get("x-powered-by"), null);
+  const gallery = await fetch(`http://127.0.0.1:${port}/gallery`, { signal: AbortSignal.timeout(5_000) });
+  assert.equal(gallery.status, 404, "The development art gallery must stay out of production");
   console.log("Production shell and health endpoint passed.");
 } catch (error) {
   console.error(output);
