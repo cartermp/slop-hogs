@@ -17,7 +17,8 @@
     "typecheck": "tsc --noEmit",
     "test": "node --test tests/*.test.ts",
     "check": "npm run policy:check && npm run typecheck && npm test",
-    "smoke": "node scripts/smoke.ts && node scripts/check-startup-rejection.ts"
+    "smoke": "node scripts/smoke.ts && node scripts/check-startup-rejection.ts",
+    "simulate": "node scripts/simulate-feeding.ts"
   },
   "dependencies": {
     "next": "16.3.4",
