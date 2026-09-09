@@ -86,6 +86,20 @@ jobs:
           node-version: 24.19.0
           cache: npm
       - run: npm ci --engine-strict
+      - name: Verify database reference
+        run: |
+          app_url=$(npx --yes @railway/cli@5.50.2 variable list \
+            --project "$RAILWAY_PROJECT_ID" \
+            --environment "$RAILWAY_ENVIRONMENT_ID" \
+            --service slop-hogs \
+            --json | jq -er '.DATABASE_URL')
+          postgres_url=$(npx --yes @railway/cli@5.50.2 variable list \
+            --project "$RAILWAY_PROJECT_ID" \
+            --environment "$RAILWAY_ENVIRONMENT_ID" \
+            --service Postgres \
+            --json | jq -er '.DATABASE_URL')
+          test "$app_url" = "$postgres_url"
+          echo 'Application DATABASE_URL matches the Postgres service.'
       - name: Apply Railway configuration
         run: |
           npx --yes @railway/cli@5.50.2 config plan \
