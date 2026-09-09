@@ -7,9 +7,10 @@ The owner assigns a bounded task; Codex implements it and returns a reviewable P
 | SH-001 | App shell, CI, policy validation, repository handoff | Repository | Complete |
 | SH-002 | Pure deterministic feeding engine | SH-001 | Complete |
 | SH-003 | Base SVG hog and five diet appearances | SH-002 | Complete |
-| SH-004 | Postgres schema and atomic persistence | SH-002 | Implemented on this branch, pending review |
+| SH-004 | Postgres schema and atomic persistence | SH-002 | Complete |
 | SH-005 | Minimal-scope Bluesky OAuth | SH-004 | Planned |
-| SH-006 | Railway setup, budgets, backup and restore | SH-001, SH-004, SH-005 | Planned; before public exposure |
+| SH-006a | Railway image, manual deployment, budgets and restart checks | SH-004 | Repo setup on this branch; live setup pending |
+| SH-006b | Backup restore and remaining launch controls | SH-005, SH-006a | Required before inviting players |
 | SH-007 | Canonical post previews and feeding quotas | SH-004, SH-005 | Planned |
 | SH-008 | Eight mutations, collection, care and pacing | SH-003, SH-007 | Planned |
 | SH-009 | Public pens, gifts, blocks and owner controls | SH-008 | Planned |
@@ -19,7 +20,7 @@ The owner assigns a bounded task; Codex implements it and returns a reviewable P
 
 ## Current handoff
 
-SH-004 adds numbered migrations, accounts, hog lives, hashed sessions, and atomic action receipts. Real PostgreSQL integration checks run in CI. See [database development](database.md) for local setup and acceptance checks. Public login and feeding remain disabled until SH-005 and SH-007.
+SH-006a prepares the Railway deployment ahead of OAuth. See [Railway setup](railway.md). CI builds the production image, runs its migrations and startup against PostgreSQL, and checks an app-container restart. Live resources, spending controls, HTTPS, database restart, and backup restoration are not yet verified.
 
 Run `npm ci`, `npm run check`, `npm run build`, and `npm run smoke` to reproduce automated validation. Run `npm run dev`, then open `/gallery` to compare the five appearances at desktop and phone widths.
 

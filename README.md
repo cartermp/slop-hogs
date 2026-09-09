@@ -41,6 +41,8 @@ The Railway dollar values are **configuration targets, not a billing cap applied
 
 ## Working together
 
+The [Railway deployment runbook](docs/railway.md) covers the first manual deployment, spending limits, generated HTTPS domain, and restart verification.
+
 - [Backlog and current handoff](docs/backlog.md)
 - [Implementation plan](docs/implementation-plan.md)
 - [Architecture decisions](docs/decisions.md)

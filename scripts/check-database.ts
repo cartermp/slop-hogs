@@ -1,0 +1,20 @@
+import { createHash } from "node:crypto";
+import { readFile, readdir } from "node:fs/promises";
+import { createDatabase } from "../src/lib/server/database.ts";
+
+const pool = createDatabase();
+try {
+  const directory = new URL("../migrations/", import.meta.url);
+  const files = (await readdir(directory)).filter(name => /^\d{3}_[a-z0-9_]+\.sql$/.test(name)).sort();
+  const applied = await pool.query("SELECT name, checksum FROM schema_migrations ORDER BY name");
+  // Allow later additive migrations, so rolling back application code is possible.
+  for (const name of files) {
+    const checksum = createHash("sha256").update(await readFile(new URL(name, directory))).digest("hex");
+    if (!applied.rows.some(row => row.name === name && row.checksum === checksum)) throw new Error("Schema mismatch");
+  }
+  await pool.query("SELECT id FROM hog_lives LIMIT 0");
+  console.log("Database reachable and required migrations verified.");
+} catch {
+  console.error("Database preflight failed. Check connectivity and migrations before starting.");
+  process.exitCode = 1;
+} finally { await pool.end(); }

@@ -44,3 +44,27 @@ jobs:
       - run: npm run test:db
       - run: npm run build
       - run: npm run smoke
+      - name: Build and verify Railway image
+        if: matrix.node == '24.19.0'
+        env:
+          DATABASE_URL: postgres://slophog:test-only@localhost:5432/slophog_test
+        run: |
+          docker build -t slophog-ci .
+          docker run --rm --network host -e DATABASE_URL slophog-ci npm run db:migrate
+          docker run --rm --network host -e DATABASE_URL slophog-ci npm run db:check
+          docker run -d --name slophog-app --network host -e DATABASE_URL -e PORT=4321 slophog-ci
+          trap 'docker logs slophog-app; docker rm -f slophog-app' EXIT
+          ready=0
+          for attempt in $(seq 1 30); do
+            if curl --fail --silent http://127.0.0.1:4321/api/health; then ready=1; break; fi
+            sleep 1
+          done
+          test "$ready" = 1
+          npm run smoke:deployed -- http://127.0.0.1:4321
+          verify_command=$(docker exec slophog-app node scripts/check-persistence.ts seed)
+          docker restart slophog-app
+          docker exec slophog-app $verify_command
+          if docker run --rm --network host -e DATABASE_URL=postgres://invalid:invalid@localhost:1/missing slophog-ci; then
+            echo 'Production startup unexpectedly accepted an unreachable database'
+            exit 1
+          fi
