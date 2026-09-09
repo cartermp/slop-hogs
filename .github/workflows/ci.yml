@@ -84,13 +84,6 @@ jobs:
       - uses: actions/setup-node@49933ea5288caeca8642d1e84afbd3f7d6820020 # v4
         with:
           node-version: 24.19.0
-      - name: Link Railway project
-        run: >-
-          npx --yes @railway/cli@5.50.2 link
-          --project "$RAILWAY_PROJECT_ID"
-          --environment "$RAILWAY_ENVIRONMENT_ID"
-          --service "$RAILWAY_SERVICE_ID"
-          --json
       - name: Apply Railway configuration
         run: |
           npx --yes @railway/cli@5.50.2 config plan \
