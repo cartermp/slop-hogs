@@ -20,7 +20,9 @@
     "smoke": "node scripts/smoke.ts && node scripts/check-startup-rejection.ts",
     "simulate": "node scripts/simulate-feeding.ts",
     "db:migrate": "node --env-file-if-exists=.env.local scripts/migrate.ts",
-    "test:db": "node --env-file-if-exists=.env.local --test tests/database.integration.ts"
+    "test:db": "node --env-file-if-exists=.env.local --test tests/database.integration.ts",
+    "db:check": "node --env-file-if-exists=.env.local scripts/check-database.ts",
+    "smoke:deployed": "node scripts/smoke-deployed.ts"
   },
   "dependencies": {
     "next": "16.3.4",
