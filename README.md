@@ -2,7 +2,7 @@
 
 A Bluesky-linked virtual pet with a terrible diet. Built by one developer and Codex in small asynchronous tasks.
 
-SH-002 adds the pure feeding engine behind the construction screen. Sign-in, persistence, art, and image generation are not implemented yet.
+SH-003 adds the first repository-owned SVG hog art and five diet appearances. Sign-in and persistence are not implemented yet.
 
 ## Run locally
 
@@ -17,6 +17,8 @@ npm run dev
 If you use nvm and need to install the pinned default, run `nvm install` and `nvm use` first.
 
 Open http://localhost:3000. No database, provider account, or API key is required for this slice.
+
+In development, open http://localhost:3000/gallery to compare six-meal AI image, generated post, chatbot screenshot, human post, and shitpost builds. The gallery returns a normal not-found page in production.
 
 ## Check a change
 
@@ -42,4 +44,4 @@ The Railway dollar values are **configuration targets, not a billing cap applied
 - [Architecture decisions](docs/decisions.md)
 - [Cost controls and deployment gate](docs/cost-controls.md)
 
-Railway is the intended host. No hosted resources are created by this commit, and CI does not deploy. Next task: SH-003, the SVG hog and first five appearances.
+Railway is the intended host. No hosted resources are created by this commit, and CI does not deploy. Next task: SH-004, PostgreSQL persistence and atomic actions.
