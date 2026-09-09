@@ -6,15 +6,15 @@ This is SH-001, the application foundation. The page is an honest construction s
 
 ## Run locally
 
-Use the Node version in `.nvmrc` and npm.
+Use Node 24 or 25 and npm. `.nvmrc` pins the default Node 24 version; switching versions is optional if you already use Node 25. CI checks both majors, including Node 25.9.0.
 
 ```sh
-nvm install
-nvm use
 npm ci
 cp .env.example .env.local
 npm run dev
 ```
+
+If you use nvm and need to install the pinned default, run `nvm install` and `nvm use` first.
 
 Open http://localhost:3000. No database, provider account, or API key is required for this slice.
 
