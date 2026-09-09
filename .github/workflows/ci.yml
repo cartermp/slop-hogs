@@ -121,14 +121,21 @@ jobs:
               jq --arg id "$1" -er '.[] | select(.id == $id)'
           }
 
-          upload=$(npx --yes @railway/cli@5.50.2 up . \
-            --project "$RAILWAY_PROJECT_ID" \
-            --environment "$RAILWAY_ENVIRONMENT_ID" \
-            --service slop-hogs \
-            --detach \
-            --json \
-            --message "Recover deployment from GitHub PR #${{ github.event.pull_request.number }}")
-          id=$(printf '%s' "$upload" | jq -er '.deploymentId')
+          upload_file=$(mktemp)
+          if ! npx --yes @railway/cli@5.50.2 up . \
+              --project "$RAILWAY_PROJECT_ID" \
+              --environment "$RAILWAY_ENVIRONMENT_ID" \
+              --service slop-hogs \
+              --detach \
+              --yes \
+              --json \
+              --message "Recover deployment from GitHub PR #${{ github.event.pull_request.number }}" \
+              >"$upload_file"; then
+            cat "$upload_file"
+            exit 1
+          fi
+          cat "$upload_file"
+          id=$(jq -er '.deploymentId' "$upload_file")
           echo "Uploaded recovery deployment $id"
 
           status=
