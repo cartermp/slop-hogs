@@ -6,8 +6,8 @@ The owner assigns a bounded task; Codex implements it and returns a reviewable P
 | --- | --- | --- | --- |
 | SH-001 | App shell, CI, policy validation, repository handoff | Repository | Complete |
 | SH-002 | Pure deterministic feeding engine | SH-001 | Complete |
-| SH-003 | Base SVG hog and five diet appearances | SH-002 | Implemented on this branch, pending review |
-| SH-004 | Postgres schema and atomic persistence | SH-002 | Planned |
+| SH-003 | Base SVG hog and five diet appearances | SH-002 | Complete |
+| SH-004 | Postgres schema and atomic persistence | SH-002 | Implemented on this branch, pending review |
 | SH-005 | Minimal-scope Bluesky OAuth | SH-004 | Planned |
 | SH-006 | Railway setup, budgets, backup and restore | SH-001, SH-004, SH-005 | Planned; before public exposure |
 | SH-007 | Canonical post previews and feeding quotas | SH-004, SH-005 | Planned |
@@ -19,7 +19,7 @@ The owner assigns a bounded task; Codex implements it and returns a reviewable P
 
 ## Current handoff
 
-SH-003 adds a modular base hog, five diet appearances, and a development-only gallery backed by real six-meal game states. The public shell now shows the unmutated hog. The art uses repository-owned SVG and CSS.
+SH-004 adds numbered migrations, accounts, hog lives, hashed sessions, and atomic action receipts. Real PostgreSQL integration checks run in CI. See [database development](database.md) for local setup and acceptance checks. Public login and feeding remain disabled until SH-005 and SH-007.
 
 Run `npm ci`, `npm run check`, `npm run build`, and `npm run smoke` to reproduce automated validation. Run `npm run dev`, then open `/gallery` to compare the five appearances at desktop and phone widths.
 

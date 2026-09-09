@@ -2,7 +2,7 @@
 
 A Bluesky-linked virtual pet with a terrible diet. Built by one developer and Codex in small asynchronous tasks.
 
-SH-003 adds the first repository-owned SVG hog art and five diet appearances. Sign-in and persistence are not implemented yet.
+SH-004 adds PostgreSQL storage and atomic feeding functions. Sign-in and public feeding routes are not implemented yet.
 
 ## Run locally
 
@@ -21,6 +21,8 @@ Open http://localhost:3000. No database, provider account, or API key is require
 In development, open http://localhost:3000/gallery to compare six-meal AI image, generated post, chatbot screenshot, human post, and shitpost builds. The gallery returns a normal not-found page in production.
 
 ## Check a change
+
+Database setup and real concurrency checks are in [database development](docs/database.md). The shell still runs without a database.
 
 ```sh
 npm run check
@@ -44,4 +46,4 @@ The Railway dollar values are **configuration targets, not a billing cap applied
 - [Architecture decisions](docs/decisions.md)
 - [Cost controls and deployment gate](docs/cost-controls.md)
 
-Railway is the intended host. No hosted resources are created by this commit, and CI does not deploy. Next task: SH-004, PostgreSQL persistence and atomic actions.
+Railway is the intended host. No hosted resources are created by this commit, and CI does not deploy. Next task: SH-005, Bluesky OAuth and authenticated sessions.

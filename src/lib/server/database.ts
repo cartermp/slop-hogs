@@ -1,0 +1,26 @@
+import { Pool, type PoolClient } from "pg";
+
+export function createDatabase(connectionString = process.env.DATABASE_URL): Pool {
+  if (!connectionString) throw new Error("DATABASE_URL is required for database operations");
+  const pool = new Pool({
+    connectionString, max: 4, connectionTimeoutMillis: 5_000,
+    idleTimeoutMillis: 10_000, statement_timeout: 5_000,
+    lock_timeout: 3_000, idle_in_transaction_session_timeout: 10_000,
+  });
+  pool.on("error", () => console.error("An idle database connection failed"));
+  return pool;
+}
+
+export async function transaction<T>(pool: Pool, work: (client: PoolClient) => Promise<T>): Promise<T> {
+  const client = await pool.connect();
+  let destroy = false;
+  try {
+    await client.query("BEGIN");
+    const result = await work(client);
+    await client.query("COMMIT");
+    return result;
+  } catch (error) {
+    try { await client.query("ROLLBACK"); } catch { destroy = true; }
+    throw error;
+  } finally { client.release(destroy); }
+}
