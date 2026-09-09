@@ -1,9 +1,13 @@
-import { defineRailway, project, service } from "railway/iac";
+import { defineRailway, github, preserve, project, service } from "railway/iac";
 
 export const partial = "slop-hogs";
 
 export default defineRailway(() => {
   const slopHogs = service("slop-hogs", {
+    source: github("cartermp/slop-hogs", {
+      branch: "main",
+      autoDeploy: false,
+    }),
     build: {
       builder: "DOCKERFILE",
       dockerfilePath: "Dockerfile",
@@ -16,6 +20,12 @@ export default defineRailway(() => {
       restartPolicyType: "ON_FAILURE",
       restartPolicyMaxRetries: 2,
       numReplicas: 1,
+    },
+    env: {
+      DATABASE_URL: preserve(),
+      NEXT_TELEMETRY_DISABLED: preserve(),
+      NODE_ENV: preserve(),
+      PORT: preserve(),
     },
   });
 
