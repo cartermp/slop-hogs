@@ -1,0 +1,33 @@
+{
+  "name": "slop-hogs",
+  "version": "0.1.0",
+  "private": true,
+  "type": "module",
+  "engines": {
+    "node": "24.x"
+  },
+  "scripts": {
+    "predev": "npm run policy:check",
+    "dev": "next dev",
+    "prebuild": "npm run policy:check",
+    "build": "next build",
+    "prestart": "npm run policy:check",
+    "start": "next start",
+    "policy:check": "node scripts/check-cost-policy.ts",
+    "typecheck": "tsc --noEmit",
+    "test": "node --test tests/*.test.ts",
+    "check": "npm run policy:check && npm run typecheck && npm test",
+    "smoke": "node scripts/smoke.ts && node scripts/check-startup-rejection.ts"
+  },
+  "dependencies": {
+    "next": "16.3.4",
+    "react": "19.2.8",
+    "react-dom": "19.2.8"
+  },
+  "devDependencies": {
+    "@types/node": "24.13.3",
+    "@types/react": "19.2.18",
+    "@types/react-dom": "19.2.7",
+    "typescript": "7.0.2"
+  }
+}

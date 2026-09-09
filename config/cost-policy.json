@@ -1,0 +1,26 @@
+{
+  "version": 1,
+  "railway": {
+    "usageAlertCents": 1500,
+    "computeHardLimitCents": 3000
+  },
+  "limits": {
+    "accounts": 50,
+    "postLookupsPerAccountPerDay": 12,
+    "postLookupsGlobalPerHour": 100,
+    "cardsPerAccountPerDay": 2,
+    "cardsGlobalPerDay": 50,
+    "cardMaxBytes": 250000,
+    "cardStorageMaxBytes": 250000000,
+    "externalRequestTimeoutMs": 5000,
+    "externalResponseMaxBytes": 1000000
+  },
+  "features": {
+    "registrations": false,
+    "externalPreviews": false,
+    "cardRendering": false,
+    "activityImports": false,
+    "paidAi": false
+  },
+  "paidAiMonthlyBudgetCents": 0
+}
