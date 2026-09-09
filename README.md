@@ -2,7 +2,7 @@
 
 A Bluesky-linked virtual pet with a terrible diet. Built by one developer and Codex in small asynchronous tasks.
 
-This is SH-001, the application foundation. The page is an honest construction screen. Sign-in, feeding, persistence, and image generation are not implemented yet.
+SH-002 adds the pure feeding engine behind the construction screen. Sign-in, persistence, art, and image generation are not implemented yet.
 
 ## Run locally
 
@@ -24,9 +24,10 @@ Open http://localhost:3000. No database, provider account, or API key is require
 npm run check
 npm run build
 npm run smoke
+npm run simulate
 ```
 
-`check` validates the committed cost policy, checks TypeScript, and runs the native Node test suite. `smoke` starts the production build on loopback port 4317, checks the page and health endpoint, then stops it. CI runs these same checks with a ten-minute job timeout and cancels superseded runs.
+`check` validates the committed cost policy, checks TypeScript, and runs the native Node test suite. `smoke` starts the production build on loopback port 4317, checks the page and health endpoint, then stops it. `simulate` feeds five hogs six meals apiece and prints their stats for a quick behavior check. CI runs the automated checks with a ten-minute job timeout and cancels superseded runs.
 
 ## Cost boundary
 
@@ -41,4 +42,4 @@ The Railway dollar values are **configuration targets, not a billing cap applied
 - [Architecture decisions](docs/decisions.md)
 - [Cost controls and deployment gate](docs/cost-controls.md)
 
-Railway is the intended host. No hosted resources are created by this commit, and CI does not deploy. Next task: SH-002, the deterministic feeding engine.
+Railway is the intended host. No hosted resources are created by this commit, and CI does not deploy. Next task: SH-003, the SVG hog and first five appearances.

@@ -4,8 +4,8 @@ The owner assigns a bounded task; Codex implements it and returns a reviewable P
 
 | Task | Outcome | Prerequisites | Status |
 | --- | --- | --- | --- |
-| SH-001 | App shell, CI, policy validation, repository handoff | Repository | Implemented on this branch, pending review |
-| SH-002 | Pure deterministic feeding engine | SH-001 | Next |
+| SH-001 | App shell, CI, policy validation, repository handoff | Repository | Complete |
+| SH-002 | Pure deterministic feeding engine | SH-001 | Implemented on this branch, pending review |
 | SH-003 | Base SVG hog and five diet appearances | SH-002 | Planned |
 | SH-004 | Postgres schema and atomic persistence | SH-002 | Planned |
 | SH-005 | Minimal-scope Bluesky OAuth | SH-004 | Planned |
@@ -19,9 +19,9 @@ The owner assigns a bounded task; Codex implements it and returns a reviewable P
 
 ## Current handoff
 
-SH-001 implements the shell, strict cost policy, native Node tests, CI, task and PR templates, and documentation. The game is not playable yet. Provider limits are not configured. No live resources or paid integrations exist.
+SH-002 adds pure, versioned game transitions for five foods, elapsed hunger, six regenerating meal slots, taste, and deterministic digestion. The engine has no database, UI, network access, or paid integration.
 
-Run `npm ci`, `npm run check`, `npm run build`, and `npm run smoke` to reproduce validation. Record actual validation results in the PR rather than claiming future CI results here.
+Run `npm ci`, `npm run check`, `npm run build`, `npm run smoke`, and `npm run simulate` to reproduce validation and inspect the five diet outcomes.
 
 ## SH-002 acceptance
 
