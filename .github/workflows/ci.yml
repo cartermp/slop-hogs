@@ -109,44 +109,37 @@ jobs:
             --file .railway/railway.ts \
             --yes \
             --verbose
-      - name: Redeploy and wait
+      - name: Deploy recovery checkout and wait
         run: |
           deployment() {
             npx --yes @railway/cli@5.50.2 deployment list \
               --project "$RAILWAY_PROJECT_ID" \
               --environment "$RAILWAY_ENVIRONMENT_ID" \
               --service slop-hogs \
-              --limit 1 \
-              --json
+              --limit 20 \
+              --json |
+              jq --arg id "$1" -er '.[] | select(.id == $id)'
           }
 
-          before=$(deployment | jq -r '.[0].id')
-          npx --yes @railway/cli@5.50.2 redeploy \
+          upload=$(npx --yes @railway/cli@5.50.2 up . \
             --project "$RAILWAY_PROJECT_ID" \
             --environment "$RAILWAY_ENVIRONMENT_ID" \
             --service slop-hogs \
-            --from-source \
-            --yes
+            --detach \
+            --json \
+            --message "Recover deployment from GitHub PR #${{ github.event.pull_request.number }}")
+          id=$(printf '%s' "$upload" | jq -er '.deploymentId')
+          echo "Uploaded recovery deployment $id"
 
-          id=
           status=
-          for attempt in $(seq 1 60); do
-            latest=$(deployment)
-            id=$(printf '%s' "$latest" | jq -r '.[0].id')
-            status=$(printf '%s' "$latest" | jq -r '.[0].status')
-            if [ "$id" != "$before" ]; then
-              case "$status" in
-                SUCCESS) break ;;
-                FAILED|CRASHED|REMOVED) break ;;
-              esac
-            fi
+          for attempt in $(seq 1 80); do
+            status=$(deployment "$id" | jq -r '.status')
+            case "$status" in
+              SUCCESS) break ;;
+              FAILED|CRASHED|REMOVED) break ;;
+            esac
             sleep 5
           done
-
-          if [ "$id" = "$before" ]; then
-            echo 'Railway did not create a new deployment'
-            exit 1
-          fi
 
           npx --yes @railway/cli@5.50.2 logs \
             --project "$RAILWAY_PROJECT_ID" \
