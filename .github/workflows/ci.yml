@@ -109,6 +109,14 @@ jobs:
             --environment "$RAILWAY_ENVIRONMENT_ID" \
             --service Postgres \
             --json | jq --exit-status 'keys'
+      - name: Repair database reference
+        run: |
+          reference=$(printf '$%s' '{{Postgres.DATABASE_URL}}')
+          npx --yes @railway/cli@5.50.2 variable set \
+            --project "$RAILWAY_PROJECT_ID" \
+            --environment "$RAILWAY_ENVIRONMENT_ID" \
+            --service slop-hogs \
+            "DATABASE_URL=$reference"
       - name: Read latest build logs
         if: always()
         run: >-
