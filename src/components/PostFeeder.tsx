@@ -2,16 +2,8 @@
 
 import { useActionState } from "react";
 import { feedPostAction, previewPostAction } from "@/app/post-actions";
-import { FOOD_KINDS, type FoodKind } from "@/lib/game";
+import { FOOD_KINDS, FOOD_LABELS } from "@/lib/food";
 import type { FeedFormState, PreviewFormState, PreviewSummary } from "@/lib/post-form";
-
-const foodLabels: Record<FoodKind, string> = {
-  ai_image: "AI image glaze",
-  generated_post: "Generated-post gravy",
-  chatbot_screenshot: "Chatbot screenshot crunch",
-  human_post: "Suspiciously human",
-  shitpost: "Classic shitpost",
-};
 
 const initialPreview: PreviewFormState = { status: "idle", message: "" };
 const initialFeed: FeedFormState = { status: "idle", message: "" };
@@ -26,7 +18,7 @@ function FeedForm({ preview, requestId }: { preview: PreviewSummary; requestId: 
       <label htmlFor="food">Make this post taste like</label>
       <div>
         <select id="food" name="food" defaultValue="shitpost">
-          {FOOD_KINDS.map(food => <option key={food} value={food}>{foodLabels[food]}</option>)}
+          {FOOD_KINDS.map(food => <option key={food} value={food}>{FOOD_LABELS[food]}</option>)}
         </select>
         <button className="auth-button" type="submit" disabled={pending}>
           {pending ? "Feeding..." : "Feed this post"}

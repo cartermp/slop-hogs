@@ -1,4 +1,9 @@
-import { favoriteFood, type FoodKind, type GameState } from "@/lib/game";
+import {
+  favoriteFood,
+  type FoodKind,
+  type GameState,
+  type MutationId,
+} from "@/lib/game";
 
 export const ART_VERSION = 1 as const;
 
@@ -91,7 +96,38 @@ export const DIET_APPEARANCES: Record<FoodKind, HogAppearance> = {
   },
 };
 
-export function appearanceForState(state: Pick<GameState, "taste">): HogAppearance {
+const MUTATION_APPEARANCE: Record<MutationId, Partial<HogAppearance>> = {
+  glazed_eyes: { eyes: "wet" },
+  sparkle_sweats: { effect: "sparkles" },
+  thought_leader_blazer: { outfit: "blazer" },
+  veneer_grin: { mouth: "veneers" },
+  cursor_eyes: { eyes: "cursor" },
+  keyboard_spine: { back: "keyboard" },
+  free_range_frame: { body: "lean" },
+  mud_crown: { outfit: "cap" },
+};
+
+const DIET_BASE_APPEARANCE: Record<FoodKind, Partial<HogAppearance>> = {
+  ai_image: { body: "huge" },
+  generated_post: { body: "round" },
+  chatbot_screenshot: { body: "round", mouth: "flat", effect: "chat" },
+  human_post: { eyes: "judging", mouth: "flat" },
+  shitpost: { body: "round", eyes: "shades", mouth: "grin", effect: "flies" },
+};
+
+export function appearanceForState(
+  state: Pick<GameState, "taste" | "equippedMutations">,
+): HogAppearance {
   const favorite = favoriteFood(state.taste);
-  return favorite === null ? BASE_HOG : DIET_APPEARANCES[favorite];
+  const namedAppearance = favorite === null ? BASE_HOG : DIET_APPEARANCES[favorite];
+  return state.equippedMutations.reduce<HogAppearance>(
+    (appearance, mutation) => ({ ...appearance, ...MUTATION_APPEARANCE[mutation] }),
+    {
+      ...BASE_HOG,
+      variant: namedAppearance.variant,
+      name: namedAppearance.name,
+      description: namedAppearance.description,
+      ...(favorite === null ? {} : DIET_BASE_APPEARANCE[favorite]),
+    },
+  );
 }

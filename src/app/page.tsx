@@ -1,11 +1,14 @@
+import { randomUUID } from "node:crypto";
 import Link from "next/link";
 import { cookies } from "next/headers";
+import { HogControls } from "@/components/HogControls";
 import { Hog } from "@/components/hog/Hog";
-import { BASE_HOG } from "@/components/hog/appearance";
+import { appearanceForState, BASE_HOG } from "@/components/hog/appearance";
 import { PostFeeder } from "@/components/PostFeeder";
+import { MUTATION_CATALOG } from "@/lib/game";
 import { loadCostPolicy } from "@/lib/server/cost-policy";
 import { getDatabase } from "@/lib/server/database";
-import { getAppSession } from "@/lib/server/hogs";
+import { getHogView } from "@/lib/server/hogs";
 
 const messages: Record<string, string> = {
   invalid_callback: "Bluesky could not verify that login. Please start again.",
@@ -21,7 +24,8 @@ export default async function Home({
   searchParams: Promise<Record<string, string | string[] | undefined>>;
 }) {
   const token = (await cookies()).get("slop_hogs_session")?.value;
-  const session = token ? await getAppSession(getDatabase(), token) : null;
+  const hog = token ? await getHogView(getDatabase(), token) : null;
+  const appearance = hog ? appearanceForState(hog.state) : BASE_HOG;
   const query = await searchParams;
   const errorCode = typeof query.auth_error === "string" ? query.auth_error : "";
   const notice = messages[errorCode]
@@ -32,18 +36,44 @@ export default async function Home({
       <p className="eyebrow">Slop Hogs</p>
       <h1>A small pig.<br />A terrible appetite.</h1>
       <div className="pen">
-        <div className="pen-art"><Hog appearance={BASE_HOG} /></div>
+        <div className="pen-art"><Hog appearance={appearance} /></div>
         <div className="pen-copy">
-          <p className="pen-label">{session ? "Your hog knows who owns the slop." : "Your hog is almost ready."}</p>
-          <p>{session
-            ? <>Verified owner: <code>{session.ownerDid}</code><br />Hog: <code>{session.hogId}</code></>
+          <p className="pen-label">{hog ? appearance.name : "Your hog is almost ready."}</p>
+          <p>{hog
+            ? <>{appearance.description}<br />Verified owner: <code>{hog.ownerDid}</code><br />Hog: <code>{hog.hogId}</code></>
             : "Sign in with Bluesky to claim one private-alpha hog. Slop Hogs requests identity only and cannot post for you."}</p>
+          {hog && (
+            <dl className="pen-stats">
+              <div><dt>Meals</dt><dd>{hog.state.mealsAvailable}/6</dd></div>
+              <div><dt>Hunger</dt><dd>{hog.state.hunger}</dd></div>
+              <div><dt>Filth</dt><dd>{hog.state.stats.filth}</dd></div>
+              <div><dt>Joy</dt><dd>{hog.state.stats.joy}</dd></div>
+            </dl>
+          )}
         </div>
       </div>
       {notice && <p className={errorCode ? "auth-notice auth-error" : "auth-notice"}>{notice}</p>}
-      {session ? (
+      {hog ? (
         <>
           <form action="/oauth/logout" method="post"><button className="auth-button" type="submit">Sign out</button></form>
+          <HogControls feedRequestId={randomUUID()} cleanRequestId={randomUUID()} />
+          <section className="mutation-collection" aria-labelledby="collection-title">
+            <p className="eyebrow">Mutation collection</p>
+            <h2 id="collection-title">{hog.state.discoveries.length} of {MUTATION_CATALOG.length} bad ideas discovered.</h2>
+            <div className="mutation-grid">
+              {MUTATION_CATALOG.map(mutation => {
+                const discovered = hog.state.discoveries.includes(mutation.id);
+                const equipped = hog.state.equippedMutations.includes(mutation.id);
+                return (
+                  <article className={discovered ? "mutation-card" : "mutation-card mutation-locked"} key={mutation.id}>
+                    <p className="specimen">{equipped ? "Equipped" : discovered ? mutation.slot : "Undiscovered"}</p>
+                    <h3>{discovered ? mutation.name : "???"}</h3>
+                    <p>{discovered ? mutation.description : "Keep feeding deliberate diets to reveal this mutation."}</p>
+                  </article>
+                );
+              })}
+            </div>
+          </section>
           {loadCostPolicy().features.externalPreviews
             ? <PostFeeder />
             : <p className="note">Public-post feeding is temporarily disabled.</p>}

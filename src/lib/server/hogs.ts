@@ -2,10 +2,12 @@ import { createHash, randomBytes, randomUUID } from "node:crypto";
 import type { Pool, PoolClient } from "pg";
 import {
   applyGameAction,
+  advanceGameTime,
   createGameState,
   parseGameAction,
   parseGameState,
   type FoodKind,
+  type GameState,
   type GameResult,
 } from "../game.ts";
 import { loadCostPolicy } from "./cost-policy.ts";
@@ -59,6 +61,10 @@ export interface AppSession {
   hogId: string;
 }
 
+export interface HogView extends AppSession {
+  state: GameState;
+}
+
 export async function getAppSession(pool: Pool, token: string): Promise<AppSession | null> {
   if (!sessionToken.test(token)) return null;
   const result = await pool.query<{ owner_did: string; hog_id: string }>(
@@ -70,6 +76,31 @@ export async function getAppSession(pool: Pool, token: string): Promise<AppSessi
   );
   if (!result.rowCount) return null;
   return { ownerDid: result.rows[0].owner_did, hogId: result.rows[0].hog_id };
+}
+
+export async function getHogView(pool: Pool, token: string): Promise<HogView | null> {
+  if (!sessionToken.test(token)) return null;
+  const result = await pool.query<{
+    owner_did: string;
+    hog_id: string;
+    state: unknown;
+    now_ms: number;
+  }>(
+    `SELECT session.owner_did, hog.id AS hog_id, hog.state,
+            floor(extract(epoch FROM clock_timestamp()) * 1000)::float8 AS now_ms
+       FROM app_sessions session
+       JOIN hog_lives hog ON hog.owner_did=session.owner_did AND hog.ended_at IS NULL
+      WHERE session.token_hash=$1 AND session.expires_at > clock_timestamp()`,
+    [hash(token)],
+  );
+  if (!result.rowCount) return null;
+  const row = result.rows[0];
+  const state = parseGameState(row.state);
+  return {
+    ownerDid: row.owner_did,
+    hogId: row.hog_id,
+    state: advanceGameTime(state, Math.max(row.now_ms, state.updatedAtMs)).state,
+  };
 }
 
 export async function revokeSession(pool: Pool, token: string): Promise<string | null> {
@@ -180,7 +211,17 @@ export async function feedHog(
   input: unknown,
   operationalPolicy?: OperationalPolicy,
 ): Promise<GameResult> {
-  return feedHogInternal(pool, token, hogId, requestId, input, null, operationalPolicy);
+  return actOnHog(pool, token, hogId, requestId, input, null, operationalPolicy);
+}
+
+export async function cleanHog(
+  pool: Pool,
+  token: string,
+  hogId: string,
+  requestId: string,
+  operationalPolicy?: OperationalPolicy,
+): Promise<GameResult> {
+  return actOnHog(pool, token, hogId, requestId, { type: "clean" }, null, operationalPolicy);
 }
 
 export async function feedHogFromPost(
@@ -200,7 +241,7 @@ export async function feedHogFromPost(
   ) {
     throw new Error("Invalid post source");
   }
-  return feedHogInternal(
+  return actOnHog(
     pool,
     token,
     hogId,
@@ -211,7 +252,7 @@ export async function feedHogFromPost(
   );
 }
 
-async function feedHogInternal(
+async function actOnHog(
   pool: Pool,
   token: string,
   hogId: string,

@@ -1,14 +1,38 @@
-export const RULES_VERSION = 1 as const;
+import { FOOD_KINDS, type FoodKind } from "./food.ts";
 
-export const FOOD_KINDS = [
-  "ai_image",
-  "generated_post",
-  "chatbot_screenshot",
-  "human_post",
-  "shitpost",
+export { FOOD_KINDS, type FoodKind } from "./food.ts";
+
+export const RULES_VERSION = 2 as const;
+
+export const MUTATION_IDS = [
+  "glazed_eyes",
+  "sparkle_sweats",
+  "thought_leader_blazer",
+  "veneer_grin",
+  "cursor_eyes",
+  "keyboard_spine",
+  "free_range_frame",
+  "mud_crown",
 ] as const;
 
-export type FoodKind = (typeof FOOD_KINDS)[number];
+export type MutationId = (typeof MUTATION_IDS)[number];
+export type MutationSlot = "body" | "eyes" | "mouth" | "outfit" | "back" | "effect";
+
+export const MUTATION_CATALOG: ReadonlyArray<{
+  id: MutationId;
+  name: string;
+  description: string;
+  slot: MutationSlot;
+}> = [
+  { id: "glazed_eyes", name: "Glazed Eyes", description: "Two enormous wet eyes, optimized for looking expensive.", slot: "eyes" },
+  { id: "sparkle_sweats", name: "Sparkle Sweats", description: "An aura that insists every pore is premium.", slot: "effect" },
+  { id: "thought_leader_blazer", name: "Thought Leader Blazer", description: "A tiny blazer with absolutely no sleeves or expertise.", slot: "outfit" },
+  { id: "veneer_grin", name: "Veneer Grin", description: "A full set of confidence where the teeth should be.", slot: "mouth" },
+  { id: "cursor_eyes", name: "Cursor Eyes", description: "One eye is still waiting for the rest of the answer.", slot: "eyes" },
+  { id: "keyboard_spine", name: "Keyboard Spine", description: "A mechanical keyboard has become load-bearing.", slot: "back" },
+  { id: "free_range_frame", name: "Free-Range Frame", description: "Alarmingly lean and burdened with situational awareness.", slot: "body" },
+  { id: "mud_crown", name: "Mud Crown", description: "A green cap bestowed by the worst people online.", slot: "outfit" },
+];
 
 export type HogStats = { slop: number; mass: number; brain: number; filth: number; joy: number };
 export type Taste = Record<FoodKind, number>;
@@ -24,14 +48,22 @@ export type GameState = {
   stats: HogStats;
   taste: Taste;
   mealsEaten: number;
+  recentMeals: FoodKind[];
+  discoveries: MutationId[];
+  equippedMutations: MutationId[];
+  lastCleanedAtMs: number | null;
 };
 
-export type GameAction = { type: "feed"; food: FoodKind };
+export type GameAction =
+  | { type: "feed"; food: FoodKind }
+  | { type: "clean" };
 
 export type GameEvent =
   | { type: "time_passed"; hungerGained: number; mealsRegenerated: number }
   | { type: "fed"; food: FoodKind; digestionBonus: number }
-  | { type: "favorite_changed"; favorite: FoodKind | null };
+  | { type: "favorite_changed"; favorite: FoodKind | null }
+  | { type: "mutation_discovered"; mutation: MutationId; text: string }
+  | { type: "cleaned"; filthRemoved: number; joyGained: number };
 
 export type GameResult = { state: GameState; events: GameEvent[] };
 
@@ -40,6 +72,8 @@ export type GameErrorCode =
   | "INVALID_STATE"
   | "INVALID_TIME"
   | "NO_MEALS_AVAILABLE"
+  | "ALREADY_CLEAN"
+  | "CLEANING_COOLDOWN"
   | "UNSUPPORTED_RULES_VERSION";
 
 export class GameError extends Error {
@@ -53,8 +87,10 @@ export class GameError extends Error {
 }
 
 const MAX_MEALS = 6;
+const RECENT_MEAL_LIMIT = 6;
 const MEAL_REFILL_MS = 4 * 60 * 60 * 1_000;
 const HUNGER_TICK_MS = 60 * 60 * 1_000;
+export const CLEANING_COOLDOWN_MS = 4 * 60 * 60 * 1_000;
 const UINT32_MAX = 0xffff_ffff;
 const MAX_COUNTER = Number.MAX_SAFE_INTEGER;
 
@@ -65,6 +101,55 @@ const FOOD_EFFECTS: Record<FoodKind, HogStats> = {
   human_post: { slop: -5, mass: 2, brain: 4, filth: 1, joy: 1 },
   shitpost: { slop: 2, mass: 4, brain: 0, filth: 7, joy: 8 },
 };
+
+type MutationDefinition = {
+  id: MutationId;
+  slot: MutationSlot;
+  food: FoodKind;
+  discoverAt: number;
+  retainAt: number;
+  priority: number;
+  incompatibleWith: readonly MutationId[];
+  eventText: string;
+};
+
+// Recipes stay in this server-side rules module; only the recipe-free catalog is rendered.
+const MUTATION_DEFINITIONS: readonly MutationDefinition[] = [
+  {
+    id: "glazed_eyes", slot: "eyes", food: "ai_image", discoverAt: 2, retainAt: 1, priority: 10,
+    incompatibleWith: ["cursor_eyes"], eventText: "Its eyes glaze over. Somehow, this counts as polish.",
+  },
+  {
+    id: "sparkle_sweats", slot: "effect", food: "ai_image", discoverAt: 4, retainAt: 3, priority: 10,
+    incompatibleWith: [], eventText: "The hog begins sweating sparkles. They are not biodegradable.",
+  },
+  {
+    id: "thought_leader_blazer", slot: "outfit", food: "generated_post", discoverAt: 2, retainAt: 1, priority: 10,
+    incompatibleWith: ["mud_crown"], eventText: "A blazer forms around the hog before it has a single thought.",
+  },
+  {
+    id: "veneer_grin", slot: "mouth", food: "generated_post", discoverAt: 4, retainAt: 3, priority: 10,
+    incompatibleWith: [], eventText: "Every tooth becomes a talking point.",
+  },
+  {
+    id: "cursor_eyes", slot: "eyes", food: "chatbot_screenshot", discoverAt: 2, retainAt: 1, priority: 20,
+    incompatibleWith: ["glazed_eyes"], eventText: "A cursor starts blinking behind one eye.",
+  },
+  {
+    id: "keyboard_spine", slot: "back", food: "chatbot_screenshot", discoverAt: 4, retainAt: 3, priority: 10,
+    incompatibleWith: [], eventText: "Its spine rearranges into keys nobody should press.",
+  },
+  {
+    id: "free_range_frame", slot: "body", food: "human_post", discoverAt: 2, retainAt: 1, priority: 10,
+    incompatibleWith: [], eventText: "The hog develops posture and immediately regrets it.",
+  },
+  {
+    id: "mud_crown", slot: "outfit", food: "shitpost", discoverAt: 2, retainAt: 1, priority: 20,
+    incompatibleWith: ["thought_leader_blazer"], eventText: "The mud recognizes one of its own and grants a crown.",
+  },
+];
+
+const definitionById = new Map(MUTATION_DEFINITIONS.map(definition => [definition.id, definition]));
 
 const emptyTaste = (): Taste => ({
   ai_image: 0,
@@ -89,12 +174,25 @@ export function createGameState(serverTimeMs: number, seed: number): GameState {
     stats: { slop: 0, mass: 20, brain: 100, filth: 0, joy: 50 },
     taste: emptyTaste(),
     mealsEaten: 0,
+    recentMeals: [],
+    discoveries: [],
+    equippedMutations: [],
+    lastCleanedAtMs: null,
   };
 }
 
 export function parseGameAction(input: unknown): GameAction {
-  if (!isRecord(input) || Object.keys(input).length !== 2 || input.type !== "feed") {
-    throw new GameError("INVALID_ACTION", "action must be a feed action with exactly type and food");
+  if (!isRecord(input) || typeof input.type !== "string") {
+    throw new GameError("INVALID_ACTION", "action must be an object with a supported type");
+  }
+  if (input.type === "clean") {
+    if (!hasExactKeys(input, ["type"])) {
+      throw new GameError("INVALID_ACTION", "clean action must contain only its type");
+    }
+    return { type: "clean" };
+  }
+  if (input.type !== "feed" || !hasExactKeys(input, ["type", "food"])) {
+    throw new GameError("INVALID_ACTION", "feed action must contain exactly type and food");
   }
   if (typeof input.food !== "string" || !FOOD_KINDS.includes(input.food as FoodKind)) {
     throw new GameError("INVALID_ACTION", "food is not supported by this rules version");
@@ -106,6 +204,7 @@ export function applyGameAction(savedState: unknown, actionInput: unknown, serve
   const state = parseGameState(savedState);
   const action = parseGameAction(actionInput);
   const advanced = advanceGameTime(state, serverTimeMs);
+  if (action.type === "clean") return applyCleanAction(advanced, serverTimeMs);
   if (advanced.state.mealsAvailable === 0) {
     throw new GameError("NO_MEALS_AVAILABLE", "the hog has eaten all available meals");
   }
@@ -125,21 +224,99 @@ export function applyGameAction(savedState: unknown, actionInput: unknown, serve
     [action.food]: Math.min(MAX_COUNTER, advanced.state.taste[action.food] + 1),
   };
   const favorite = favoriteFood(taste);
+  const recentMeals = [...advanced.state.recentMeals, action.food].slice(-RECENT_MEAL_LIMIT);
   const events: GameEvent[] = [...advanced.events, { type: "fed", food: action.food, digestionBonus }];
   if (favorite !== previousFavorite) events.push({ type: "favorite_changed", favorite });
 
+  const fedState: GameState = {
+    ...advanced.state,
+    rngState,
+    updatedAtMs: serverTimeMs,
+    mealsAvailable: advanced.state.mealsAvailable - 1,
+    hunger: clamp(advanced.state.hunger - 18, 0, 100),
+    stats,
+    taste,
+    mealsEaten: Math.min(MAX_COUNTER, advanced.state.mealsEaten + 1),
+    recentMeals,
+  };
+  const resolved = resolveMutations(fedState);
+  for (const mutation of resolved.newDiscoveries) {
+    events.push({
+      type: "mutation_discovered",
+      mutation,
+      text: definitionById.get(mutation)!.eventText,
+    });
+  }
+  return { state: resolved.state, events };
+}
+
+function applyCleanAction(advanced: GameResult, serverTimeMs: number): GameResult {
+  const { state } = advanced;
+  if (state.lastCleanedAtMs !== null && serverTimeMs - state.lastCleanedAtMs < CLEANING_COOLDOWN_MS) {
+    throw new GameError("CLEANING_COOLDOWN", "the wash trough needs time to drain");
+  }
+  if (state.stats.filth === 0) {
+    throw new GameError("ALREADY_CLEAN", "the hog is already suspiciously clean");
+  }
+  const filthRemoved = Math.min(30, state.stats.filth);
+  const joyGained = Math.min(4, 100 - state.stats.joy);
   return {
     state: {
-      ...advanced.state,
-      rngState,
+      ...state,
       updatedAtMs: serverTimeMs,
-      mealsAvailable: advanced.state.mealsAvailable - 1,
-      hunger: clamp(advanced.state.hunger - 18, 0, 100),
-      stats,
-      taste,
-      mealsEaten: Math.min(MAX_COUNTER, advanced.state.mealsEaten + 1),
+      stats: {
+        ...state.stats,
+        filth: state.stats.filth - filthRemoved,
+        joy: state.stats.joy + joyGained,
+      },
+      lastCleanedAtMs: serverTimeMs,
     },
-    events,
+    events: [...advanced.events, { type: "cleaned", filthRemoved, joyGained }],
+  };
+}
+
+function resolveMutations(state: GameState): {
+  state: GameState;
+  newDiscoveries: MutationId[];
+} {
+  const counts = new Map<FoodKind, number>(FOOD_KINDS.map(food => [food, 0]));
+  for (const food of state.recentMeals) counts.set(food, counts.get(food)! + 1);
+  const discovered = new Set(state.discoveries);
+  const equipped = new Set(state.equippedMutations);
+  const newDiscoveries: MutationId[] = [];
+  for (const definition of MUTATION_DEFINITIONS) {
+    if (!discovered.has(definition.id) && counts.get(definition.food)! >= definition.discoverAt) {
+      discovered.add(definition.id);
+      newDiscoveries.push(definition.id);
+    }
+  }
+
+  const candidates = MUTATION_DEFINITIONS
+    .filter(definition => {
+      if (!discovered.has(definition.id)) return false;
+      const threshold = equipped.has(definition.id) ? definition.retainAt : definition.discoverAt;
+      return counts.get(definition.food)! >= threshold;
+    })
+    .sort((left, right) => right.priority - left.priority);
+  const selected: MutationDefinition[] = [];
+  for (const candidate of candidates) {
+    if (
+      selected.some(existing => existing.slot === candidate.slot)
+      || selected.some(existing => (
+        existing.incompatibleWith.includes(candidate.id)
+        || candidate.incompatibleWith.includes(existing.id)
+      ))
+    ) continue;
+    selected.push(candidate);
+  }
+  const selectedIds = new Set(selected.map(definition => definition.id));
+  return {
+    state: {
+      ...state,
+      discoveries: MUTATION_IDS.filter(id => discovered.has(id)),
+      equippedMutations: MUTATION_IDS.filter(id => selectedIds.has(id)),
+    },
+    newDiscoveries,
   };
 }
 
@@ -193,7 +370,8 @@ export function parseGameState(input: unknown): GameState {
   }
   const expected = [
     "rulesVersion", "rngState", "updatedAtMs", "hungerTickAtMs", "mealRefillAtMs",
-    "mealsAvailable", "hunger", "stats", "taste", "mealsEaten",
+    "mealsAvailable", "hunger", "stats", "taste", "mealsEaten", "recentMeals",
+    "discoveries", "equippedMutations", "lastCleanedAtMs",
   ];
   if (!hasExactKeys(input, expected)) throw new GameError("INVALID_STATE", "saved state has missing or unknown fields");
 
@@ -206,6 +384,12 @@ export function parseGameState(input: unknown): GameState {
   assertIntegerInRange(input.mealsEaten, 0, MAX_COUNTER, "mealsEaten");
   if (input.hungerTickAtMs > input.updatedAtMs || input.mealRefillAtMs > input.updatedAtMs) {
     throw new GameError("INVALID_STATE", "state clock anchors cannot be in the future");
+  }
+  if (input.lastCleanedAtMs !== null) {
+    assertTime(input.lastCleanedAtMs);
+    if (input.lastCleanedAtMs > input.updatedAtMs) {
+      throw new GameError("INVALID_STATE", "last cleaning cannot be in the future");
+    }
   }
 
   if (!isRecord(input.stats) || !hasExactKeys(input.stats, ["slop", "mass", "brain", "filth", "joy"])) {
@@ -223,7 +407,53 @@ export function parseGameState(input: unknown): GameState {
   for (const food of FOOD_KINDS) {
     assertIntegerInRange(input.taste[food], 0, MAX_COUNTER, `taste.${food}`);
   }
-  return input as GameState;
+  if (
+    !Array.isArray(input.recentMeals)
+    || input.recentMeals.length > RECENT_MEAL_LIMIT
+    || input.recentMeals.some(food => typeof food !== "string" || !FOOD_KINDS.includes(food as FoodKind))
+  ) {
+    throw new GameError("INVALID_STATE", "recent meals are invalid");
+  }
+  const discoveries = parseMutationIds(input.discoveries, "discoveries");
+  const equippedMutations = parseMutationIds(input.equippedMutations, "equippedMutations");
+  const discovered = new Set(discoveries);
+  if (equippedMutations.some(id => !discovered.has(id))) {
+    throw new GameError("INVALID_STATE", "equipped mutations must be discovered");
+  }
+  const equippedDefinitions = equippedMutations.map(id => definitionById.get(id)!);
+  if (new Set(equippedDefinitions.map(definition => definition.slot)).size !== equippedDefinitions.length) {
+    throw new GameError("INVALID_STATE", "equipped mutations cannot share an appearance slot");
+  }
+  for (const definition of equippedDefinitions) {
+    if (equippedMutations.some(id => definition.incompatibleWith.includes(id))) {
+      throw new GameError("INVALID_STATE", "equipped mutations are incompatible");
+    }
+    const exposure = input.recentMeals.filter(food => food === definition.food).length;
+    if (exposure < definition.retainAt) {
+      throw new GameError("INVALID_STATE", "equipped mutation lacks recent food exposure");
+    }
+  }
+  const state = input as GameState;
+  const canonical = resolveMutations(state).state;
+  if (
+    JSON.stringify(canonical.discoveries) !== JSON.stringify(state.discoveries)
+    || JSON.stringify(canonical.equippedMutations) !== JSON.stringify(state.equippedMutations)
+  ) {
+    throw new GameError("INVALID_STATE", "mutation state is not canonical for recent food exposure");
+  }
+  return state;
+}
+
+function parseMutationIds(input: unknown, name: string): MutationId[] {
+  if (
+    !Array.isArray(input)
+    || input.length > MUTATION_IDS.length
+    || input.some(id => typeof id !== "string" || !MUTATION_IDS.includes(id as MutationId))
+    || new Set(input).size !== input.length
+  ) {
+    throw new GameError("INVALID_STATE", `${name} are invalid`);
+  }
+  return input as MutationId[];
 }
 
 function nextDigestionBonus(state: number): [number, number] {

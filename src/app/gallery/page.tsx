@@ -1,6 +1,6 @@
 import { notFound } from "next/navigation";
 import { Hog } from "@/components/hog/Hog";
-import { DIET_APPEARANCES } from "@/components/hog/appearance";
+import { appearanceForState } from "@/components/hog/appearance";
 import { FOOD_KINDS, applyGameAction, createGameState } from "@/lib/game";
 
 const start = Date.UTC(2026, 0, 1);
@@ -25,8 +25,8 @@ export default function Gallery() {
       </header>
       <section className="hog-grid" aria-label="Diet appearance gallery">
         {FOOD_KINDS.map(food => {
-          const appearance = DIET_APPEARANCES[food];
           const state = sixMealState(food);
+          const appearance = appearanceForState(state);
           return (
             <article className={`hog-card hog-card-${food}`} key={food}>
               <div className="hog-stage"><Hog appearance={appearance} /></div>
