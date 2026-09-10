@@ -87,7 +87,7 @@ Temporarily add `RESTORE_DATABASE_URL=${{RestoredPostgres.DATABASE_URL}}` to the
 npm run backup:verify
 ```
 
-The verifier requires both databases to contain the prepared challenge and identical synthetic hog state. It writes a random probe to the restore target and refuses verification if the source can see that probe, preventing the production database from being accepted as its own restore. A successful result records the verification time and both measured database sizes in production for `/owner`.
+The verifier requires both databases to contain the prepared challenge and identical synthetic hog state. It writes a random probe to the restore target and refuses verification if the source can see that probe, preventing the production database from being accepted as its own restore. A successful result records the verification time and both measured database sizes in production for `/owner`, then consumes the challenge so the same restore cannot refresh that timestamp. Run `backup:prepare` again before every later restore test.
 
 Remove `RESTORE_DATABASE_URL`, delete the temporary restored service and its volume, and confirm they no longer appear in project resources. Do not delete the production volume or retained synthetic fixture. Record the backup schedule, backup timestamp, restore verification timestamp, and cleanup in operating notes. Repeat the restore test before risky migrations and periodically while the alpha contains valued progress.
 
