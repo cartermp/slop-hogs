@@ -4,7 +4,7 @@ Status: repository setup only. No Railway project, billing limits, domain, backu
 
 ## 1. Set the spending controls first
 
-Use a dedicated Hobby workspace if practical. In Workspace Usage, set the Compute email alert to $15 and hard limit to $30. Set Railway Agent to zero if accepted, otherwise the minimum available, and do not use it. Confirm you are changing the intended workspace. The compute cutoff can stop every workload in it; it is not a promise that subscription charges, tax, or other vendors are included in $30. These settings are dashboard controls, not enforced by railway.json. See [Railway cost controls](https://docs.railway.com/pricing/cost-control).
+Use a dedicated Hobby workspace if practical. In Workspace Usage, set the Compute email alert to $15 and hard limit to $30. Set Railway Agent to zero if accepted, otherwise the minimum available, and do not use it. Confirm you are changing the intended workspace. The compute cutoff can stop every workload in it; it is not a promise that subscription charges, tax, or other vendors are included in $30. These settings are dashboard controls, not enforced by `.railway/railway.ts`. See [Railway cost controls](https://docs.railway.com/pricing/cost-control).
 
 ## 2. Create the two services
 
@@ -25,13 +25,13 @@ Use the private DATABASE_URL, not DATABASE_PUBLIC_URL. Do not add TEST_DATABASE_
 
 ## 3. Connect and deploy deliberately
 
-Connect `cartermp/slop-hogs` with root directory `/` and config path `/railway.json`. Disable automatic deployments from GitHub and PR environments. Enable Wait for CI if available as an additional guard. If connecting proposes an initial deployment, hold it until the configuration is complete and the chosen main commit has green CI.
+Connect `cartermp/slop-hogs` with root directory `/`. Do not configure a legacy Railway config-file path. Review `.railway/railway.ts` with `railway config plan`, then apply it deliberately with `railway config apply`. Disable automatic deployments from GitHub and PR environments. Enable Wait for CI if available as an additional guard. If connecting proposes an initial deployment, hold it until the configuration is complete and the chosen main commit has green CI.
 
 Deploy that reviewed commit manually. Confirm the commit SHA in Railway matches the green commit in GitHub. Do not assume that a green earlier commit makes the latest main safe. There is no GitHub Actions deployment credential or automatic deployment workflow in this setup.
 
 The Dockerfile pins Node 24.19.0 and runs npm ci and next build without database access. It runs as the unprivileged node user. TypeScript stays in the image for the current Next config loader; no extra runtime package is added.
 
-Railway reads the pre-deploy command from railway.json. It validates policy and applies locked, checksummed migrations through the private network. A failed command blocks deployment. The startup script separately checks database connectivity and required migration checksums, then starts Next on 0.0.0.0 and PORT. Missing credentials or a bad schema prevent startup. Restart retries are capped at two. See [pre-deploy commands](https://docs.railway.com/deployments/pre-deploy-command) and [config reference](https://docs.railway.com/config-as-code/reference).
+Railway reads the pre-deploy command from `.railway/railway.ts`. It validates policy and applies locked, checksummed migrations through the private network. A failed command blocks deployment. As a startup safeguard, the application reruns the idempotent, advisory-locked migrator, verifies database connectivity and migration checksums, then starts Next on 0.0.0.0 and PORT. Missing credentials or a bad schema prevent startup. Restart retries are capped at two. See [pre-deploy commands](https://docs.railway.com/deployments/pre-deploy-command) and [Infrastructure as Code](https://docs.railway.com/infrastructure-as-code).
 
 ## 4. Generate HTTPS and verify
 

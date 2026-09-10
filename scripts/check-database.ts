@@ -14,7 +14,8 @@ try {
   }
   await pool.query("SELECT id FROM hog_lives LIMIT 0");
   console.log("Database reachable and required migrations verified.");
-} catch {
-  console.error("Database preflight failed. Check connectivity and migrations before starting.");
+} catch (error) {
+  const detail = error instanceof Error ? error.message : String(error);
+  console.error(`Database preflight failed: ${detail}`);
   process.exitCode = 1;
 } finally { await pool.end(); }
