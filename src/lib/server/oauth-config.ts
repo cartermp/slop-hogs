@@ -37,6 +37,14 @@ export function parseInvitedDids(value = ""): ReadonlySet<string> {
   return invited;
 }
 
+export function parseOwnerDids(value = ""): ReadonlySet<string> {
+  const owners = new Set(value.split(",").map(item => item.trim()).filter(Boolean));
+  for (const owner of owners) {
+    if (!isValidDid(owner)) throw new Error("SLOP_HOGS_OWNER_DIDS contains an invalid DID");
+  }
+  return owners;
+}
+
 function parseTrustedProxyCount(value: string | undefined, production: boolean): number {
   if (value === undefined && !production) return 0;
   if (!/^[0-5]$/.test(value ?? "")) throw new Error("TRUSTED_PROXY_COUNT must be an integer from 0 to 5");

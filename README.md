@@ -2,7 +2,7 @@
 
 A Bluesky-linked virtual pet with a terrible diet. Built by one developer and Codex in small asynchronous tasks.
 
-SH-005 adds minimal-permission Bluesky OAuth, encrypted provider sessions, and revocable application sessions. Public-post feeding is not implemented yet.
+SH-006 completes the repository-side launch controls: bounded database growth, automatic registration and write cutoffs, an owner-only operations view, and a restore verification workflow. Public-post feeding is not implemented yet.
 
 ## Run locally
 
@@ -20,7 +20,7 @@ Open http://localhost:3000. No database, provider account, or API key is require
 
 In development, open http://localhost:3000/gallery to compare six-meal AI image, generated post, chatbot screenshot, human post, and shitpost builds. The gallery returns a normal not-found page in production.
 
-The shell and gallery still run without auth configuration. To exercise OAuth, configure PostgreSQL as described in [database development](docs/database.md), run migrations, and set `APP_ORIGIN`, `OAUTH_PRIVATE_KEY`, `OAUTH_ENCRYPTION_KEY`, and `BLUESKY_INVITED_DIDS`. Generate the two secrets with:
+The shell and gallery still run without auth configuration. To exercise OAuth, configure PostgreSQL as described in [database development](docs/database.md), run migrations, and set `APP_ORIGIN`, `OAUTH_PRIVATE_KEY`, `OAUTH_ENCRYPTION_KEY`, `BLUESKY_INVITED_DIDS`, and `SLOP_HOGS_OWNER_DIDS`. Generate the two secrets with:
 
 ```sh
 openssl genpkey -algorithm EC -pkeyopt ec_paramgen_curve:P-256
@@ -40,21 +40,21 @@ npm run smoke
 npm run simulate
 ```
 
-`check` validates the committed cost policy, checks TypeScript, and runs the native Node test suite. `smoke` starts the production build on loopback port 4317, checks the page and health endpoint, then stops it. `simulate` feeds five hogs six meals apiece and prints their stats for a quick behavior check. CI runs the automated checks with a ten-minute job timeout and cancels superseded runs.
+`check` validates the committed cost policy, checks TypeScript, and runs the native Node test suite. `smoke` starts the production build on loopback port 4317, checks the page and health endpoint, then stops it. `simulate` feeds five hogs six meals apiece and prints their stats for a quick behavior check. Database integration tests cover persisted growth cutoffs, read-only behavior, and restore-target isolation. CI runs the automated checks with a ten-minute job timeout and cancels superseded runs.
 
 ## Cost boundary
 
-`config/cost-policy.json` holds the approved initial limits. Startup refuses missing, malformed, or unsafe settings. Invite-only registration is enabled with a 50-account cap and bounded login initiation; every other unfinished feature remains disabled. OAuth discovery is the only external work in this slice, and there are no paid API calls or committed credentials.
+`config/cost-policy.json` holds the approved initial limits. Startup refuses missing, malformed, or unsafe settings. Invite-only registration is enabled with a 50-account cap and bounded login initiation; every other unfinished feature remains disabled. The app records database size at startup and at most every 15 minutes during writes. It warns at 70% of the 1 GB internal budget, blocks registrations and cards at 85%, and rejects new game state changes at 95%. `features.readOnlyMode` is the manual emergency stop.
 
 The Railway dollar values are **configuration targets, not a billing cap applied by this code**. Configure the workspace dashboard before deployment. Request quotas must be implemented atomically with each future feature before enabling it. See [cost controls](docs/cost-controls.md).
 
 ## Working together
 
-The [Railway deployment runbook](docs/railway.md) covers the first manual deployment, spending limits, generated HTTPS domain, and restart verification.
+The owner-only `/owner` page shows application feature flags, implemented quota use, measured database size, enforced cutoffs, and the last recorded backup restore verification. The [Railway deployment runbook](docs/railway.md) covers the first manual deployment, spending limits, generated HTTPS domain, restart verification, daily backups, restore testing, and emergency controls.
 
 - [Backlog and current handoff](docs/backlog.md)
 - [Implementation plan](docs/implementation-plan.md)
 - [Architecture decisions](docs/decisions.md)
 - [Cost controls and deployment gate](docs/cost-controls.md)
 
-Railway is the intended host. No hosted resources are created by this commit, and CI does not deploy. Next task: SH-006b, backup restore and remaining launch controls.
+Railway is the intended host. Repository support for SH-006 is complete, but no hosted resource or dashboard setting can be verified from source control and CI does not deploy. Complete the live checklist in the runbook before inviting players. The next product task is SH-007.

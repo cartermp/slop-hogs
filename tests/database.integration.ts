@@ -8,20 +8,34 @@ import {
   feedHog,
   getAppSession,
   issueSession,
+  NotInvitedError,
   provisionHog,
   RegistrationClosedError,
   revokeSession,
 } from "../src/lib/server/hogs.ts";
+import { ReadOnlyError } from "../src/lib/server/operations.ts";
+import { prepareBackupRestoreCheck, verifyRestoredBackup } from "../src/lib/server/backup-restore.ts";
 import { deleteTestData, previewTestDataCleanup } from "../src/lib/server/test-data-cleanup.ts";
+
+const operationalPolicy = {
+  database: {
+    maxBytes: 1_000_000_000,
+    warningPercent: 70,
+    restrictPercent: 85,
+    readOnlyPercent: 95,
+  },
+  readOnlyMode: false,
+};
 
 test("real PostgreSQL persistence, retries, isolation and rollback", async () => {
   // Explicit separate URL. Never silently use an application database for tests.
   assert.ok(process.env.TEST_DATABASE_URL, "Set TEST_DATABASE_URL to a disposable PostgreSQL database");
-  const pool = createDatabase(process.env.TEST_DATABASE_URL);
+  let pool = createDatabase(process.env.TEST_DATABASE_URL);
   const did = `did:plc:test${randomUUID().replaceAll("-", "")}`;
   const otherDid = `did:plc:test${randomUUID().replaceAll("-", "")}`;
   const oauthDid = `did:plc:test${randomUUID().replaceAll("-", "")}`;
   const closedDid = `did:plc:test${randomUUID().replaceAll("-", "")}`;
+  const uninvitedDid = `did:plc:test${randomUUID().replaceAll("-", "")}`;
   const action = { type: "feed", food: "ai_image" };
   try {
     await Promise.all([migrate(pool), migrate(pool)]);
@@ -63,13 +77,24 @@ test("real PostgreSQL persistence, retries, isolation and rollback", async () =>
         registrationsEnabled: false,
         accountLimit: 50,
         invitedDids: new Set([closedDid]),
+        operationalPolicy,
       }),
       RegistrationClosedError,
+    );
+    await assert.rejects(
+      completeOAuthSignIn(pool, uninvitedDid, {
+        registrationsEnabled: true,
+        accountLimit: 50,
+        invitedDids: new Set(),
+        operationalPolicy,
+      }),
+      NotInvitedError,
     );
     const authenticated = await completeOAuthSignIn(pool, oauthDid, {
       registrationsEnabled: true,
       accountLimit: 50,
       invitedDids: new Set([oauthDid]),
+      operationalPolicy,
     });
     assert.deepEqual(await getAppSession(pool, authenticated.token), {
       ownerDid: oauthDid,
@@ -79,28 +104,67 @@ test("real PostgreSQL persistence, retries, isolation and rollback", async () =>
       registrationsEnabled: true,
       accountLimit: 50,
       invitedDids: new Set(),
+      operationalPolicy,
     });
     assert.equal(rotated.hogId, authenticated.hogId, "returning verified accounts retain their active hog");
     assert.equal(await getAppSession(pool, authenticated.token), null, "a new login rotates the app session");
     assert.equal((await getAppSession(pool, rotated.token))?.ownerDid, oauthDid);
+    const oauthRequest = randomUUID();
+    const oauthResult = await feedHog(pool, rotated.token, rotated.hogId, oauthRequest, action);
+    await assert.rejects(
+      feedHog(pool, rotated.token, rotated.hogId, randomUUID(), action, {
+        ...operationalPolicy,
+        readOnlyMode: true,
+      }),
+      ReadOnlyError,
+    );
+    const readOnlyStatus = await pool.query(
+      "SELECT xmin::text AS xmin, measured_at FROM operational_status WHERE id=true",
+    );
+    assert.deepEqual(
+      await feedHog(pool, rotated.token, rotated.hogId, oauthRequest, action, {
+        ...operationalPolicy,
+        readOnlyMode: true,
+      }),
+      oauthResult,
+      "read-only mode preserves idempotent receipts",
+    );
+    assert.deepEqual(
+      (await pool.query("SELECT xmin::text AS xmin, measured_at FROM operational_status WHERE id=true")).rows,
+      readOnlyStatus.rows,
+      "fresh unchanged read-only checks do not write operational status",
+    );
+    const storageBlockedDid = `did:plc:test${randomUUID().replaceAll("-", "")}`;
+    await assert.rejects(
+      completeOAuthSignIn(pool, storageBlockedDid, {
+        registrationsEnabled: true,
+        accountLimit: 50,
+        invitedDids: new Set([storageBlockedDid]),
+        operationalPolicy: {
+          ...operationalPolicy,
+          database: { ...operationalPolicy.database, maxBytes: 1 },
+        },
+      }),
+      RegistrationClosedError,
+    );
     await pool.query(
       "INSERT INTO oauth_sessions(did, encrypted_data) VALUES ($1,$2)",
       [oauthDid, Buffer.alloc(30)],
     );
-    const testDids = [did, otherDid, oauthDid, closedDid];
+    const testDids = [did, otherDid, oauthDid, closedDid, uninvitedDid, storageBlockedDid];
     assert.deepEqual(await previewTestDataCleanup(pool, testDids), {
       accounts: 3,
       hogLives: 3,
       appSessions: 3,
       oauthSessions: 1,
-      hogActions: 6,
+      hogActions: 7,
     });
     assert.deepEqual(await deleteTestData(pool, testDids), {
       accounts: 3,
       hogLives: 3,
       appSessions: 3,
       oauthSessions: 1,
-      hogActions: 6,
+      hogActions: 7,
     });
     assert.deepEqual(await previewTestDataCleanup(pool, testDids), {
       accounts: 0,
@@ -109,9 +173,70 @@ test("real PostgreSQL persistence, retries, isolation and rollback", async () =>
       oauthSessions: 0,
       hogActions: 0,
     });
+    const backupCheck = await prepareBackupRestoreCheck(pool);
+    assert.match(backupCheck.challenge, /^[0-9a-f-]{36}$/);
+    await assert.rejects(verifyRestoredBackup(pool, pool), /source database/);
+
+    const sourceUrl = new URL(process.env.TEST_DATABASE_URL);
+    const sourceDatabase = decodeURIComponent(sourceUrl.pathname.slice(1));
+    const restoredDatabase = `slophog_restore_${randomUUID().replaceAll("-", "")}`;
+    assert.match(sourceDatabase, /^[A-Za-z0-9_]+$/, "Test database name must be a simple identifier");
+    const adminUrl = new URL(sourceUrl);
+    adminUrl.pathname = "/postgres";
+    const restoredUrl = new URL(sourceUrl);
+    restoredUrl.pathname = `/${restoredDatabase}`;
+    const admin = createDatabase(adminUrl.toString());
+    let cloneCreated = false;
+    try {
+      await pool.end();
+      try {
+        await admin.query(`CREATE DATABASE "${restoredDatabase}" TEMPLATE "${sourceDatabase}"`);
+        cloneCreated = true;
+      } finally {
+        pool = createDatabase(process.env.TEST_DATABASE_URL);
+      }
+      const restored = createDatabase(restoredUrl.toString());
+      try {
+        await restored.query("UPDATE backup_restore_checks SET challenge=$1 WHERE id=true", [randomUUID()]);
+        await assert.rejects(verifyRestoredBackup(pool, restored), /prepared backup challenge/);
+        await restored.query("UPDATE backup_restore_checks SET challenge=$1 WHERE id=true", [backupCheck.challenge]);
+        const restoredState = await restored.query("SELECT state FROM hog_lives WHERE id=$1", [backupCheck.fixture_hog_id]);
+        await restored.query("UPDATE hog_lives SET state=$2 WHERE id=$1", [
+          backupCheck.fixture_hog_id,
+          { ...restoredState.rows[0].state, mealsEaten: 999 },
+        ]);
+        await assert.rejects(verifyRestoredBackup(pool, restored), /fixture is missing or changed/);
+        await restored.query("UPDATE hog_lives SET state=$2 WHERE id=$1", [
+          backupCheck.fixture_hog_id,
+          restoredState.rows[0].state,
+        ]);
+
+        const verified = await verifyRestoredBackup(pool, restored);
+        assert.equal(verified.challenge, backupCheck.challenge);
+        assert.ok(verified.sourceDatabaseSizeBytes > 0);
+        assert.ok(verified.restoredDatabaseSizeBytes > 0);
+        const recorded = await pool.query(
+          `SELECT verified_at, source_database_size_bytes, restored_database_size_bytes
+             FROM backup_restore_checks WHERE id=true`,
+        );
+        assert.ok(recorded.rows[0].verified_at instanceof Date);
+        assert.ok(Number(recorded.rows[0].source_database_size_bytes) > 0);
+        assert.ok(Number(recorded.rows[0].restored_database_size_bytes) > 0);
+        await assert.rejects(
+          verifyRestoredBackup(pool, restored),
+          /Run backup:prepare/,
+          "a successful backup challenge cannot be replayed",
+        );
+      } finally {
+        await restored.end();
+      }
+    } finally {
+      if (cloneCreated) await admin.query(`DROP DATABASE "${restoredDatabase}" WITH (FORCE)`);
+      await admin.end();
+    }
   } finally {
     // Remove only this test's uniquely named accounts and dependent fixtures.
-    const testDids = [did, otherDid, oauthDid, closedDid];
+    const testDids = [did, otherDid, oauthDid, closedDid, uninvitedDid];
     await pool.query("DELETE FROM oauth_sessions WHERE did=ANY($1)", [testDids]);
     await pool.query("DELETE FROM hog_actions WHERE hog_id IN (SELECT id FROM hog_lives WHERE owner_did=ANY($1))", [testDids]);
     await pool.query("DELETE FROM app_sessions WHERE owner_did=ANY($1)", [testDids]);

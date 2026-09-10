@@ -1,6 +1,6 @@
 # First Railway deployment
 
-Status: repository setup only. No Railway project, billing limits, domain, backup, or deployment has been configured by this PR. Live verification below remains required. This is SH-006a, brought ahead of OAuth; SH-006b is backup/restore and the remaining launch controls.
+Status: repository support for SH-006 is complete. Source control cannot confirm Railway billing limits, resource settings, domains, backup schedules, or a live restore. The owner must complete and record the live checks below before inviting players.
 
 ## 1. Set the spending controls first
 
@@ -25,13 +25,14 @@ Set application variables:
 | OAUTH_ENCRYPTION_KEY | Base64-encoded 32-byte key generated outside the repository |
 | OAUTH_KEY_ID | Stable public key identifier, for example `slop-hogs-1` |
 | BLUESKY_INVITED_DIDS | Comma-separated invited account DIDs; empty means no new accounts |
+| SLOP_HOGS_OWNER_DIDS | Comma-separated owner DIDs allowed to open `/owner` |
 | TRUSTED_PROXY_COUNT | `1` for Railway's forwarding proxy |
 
 Use the private DATABASE_URL, not DATABASE_PUBLIC_URL. Do not add TEST_DATABASE_URL or paid AI keys. Keep OAuth keys in Railway variables, never in `NEXT_PUBLIC_` variables or operating notes. Do not attach a volume to the app. Its filesystem is disposable.
 
 ## 3. Connect and deploy deliberately
 
-Connect `cartermp/slop-hogs` with root directory `/`. Do not configure a legacy Railway config-file path. Review `.railway/railway.ts` with `railway config plan`, then apply it deliberately with `railway config apply`. Disable automatic deployments from GitHub and PR environments. Enable Wait for CI if available as an additional guard. If connecting proposes an initial deployment, hold it until the configuration is complete and the chosen main commit has green CI.
+Connect `cartermp/slop-hogs` with root directory `/`. Do not configure a legacy Railway config-file path. The IaC file exports the named `slop-hogs` partial so it owns only the application service; the manually managed PostgreSQL service and volume must remain outside that partial. Review `.railway/railway.ts` with `railway config plan` and confirm the plan does not delete or replace PostgreSQL or its volume, then apply it deliberately with `railway config apply`. Disable automatic deployments from GitHub and PR environments. Enable Wait for CI if available as an additional guard. If connecting proposes an initial deployment, hold it until the configuration is complete and the chosen main commit has green CI.
 
 Deploy that reviewed commit manually. Confirm the commit SHA in Railway matches the green commit in GitHub. Do not assume that a green earlier commit makes the latest main safe. There is no GitHub Actions deployment credential or automatic deployment workflow in this setup.
 
@@ -47,7 +48,7 @@ In the app's networking settings, generate a Railway domain with target port 300
 npm run smoke:deployed -- https://YOUR-GENERATED-DOMAIN.up.railway.app
 ```
 
-This makes three bounded HTTP requests: health and home must return 200; the local art gallery must return 404. Open the home page yourself too. The health route is a cheap liveness check, not continuous database monitoring. Railway health checks gate deployment rather than providing ongoing monitoring. See [health checks](https://docs.railway.com/deployments/healthchecks).
+This makes three bounded HTTP requests: health and home must return 200; the local art gallery must return 404. Open the home page yourself too. Sign in as an owner and confirm `/owner` reports the expected feature flags, account cap, database measurement, and no restore verification yet. Sign in as a non-owner and confirm `/owner` returns 404. The health route is a cheap liveness check, not continuous database monitoring. Railway health checks gate deployment rather than providing ongoing monitoring. See [health checks](https://docs.railway.com/deployments/healthchecks).
 
 Before any real signup, use Railway's app SSH session to run:
 
@@ -64,9 +65,43 @@ npm run db:clean-test-data -- did:plc:TEST_ACCOUNT
 npm run db:clean-test-data -- --execute did:plc:TEST_ACCOUNT
 ```
 
-The command targets only the listed DIDs and refuses to remove the retained `did:plc:deploymentcheck...` fixture.
+The command targets only the listed DIDs and refuses to remove the retained deployment and backup-check fixtures.
 
-Record the project/service identifiers, deployed commit, URL, actual resource settings, confirmed spending limits, and restart results in your operating notes. Do not record secrets. This PR cannot mark those checks complete on your behalf.
+Record the project/service identifiers, deployed commit, URL, actual resource settings, confirmed spending limits, and restart results in your operating notes. Do not record secrets. Source control cannot mark those checks complete on your behalf.
+
+## 5. Enable and verify daily backups
+
+In the PostgreSQL volume settings, enable a daily backup schedule with six days of retention. Backup storage is billable. Railway restores are restricted to the same project and environment, and deleting a volume also deletes its backups. The alpha recovery target is at most 24 hours of lost progress; restore work occurs when the owner is available.
+
+Before creating the backup to test, use the app service SSH session:
+
+```sh
+npm run backup:prepare
+```
+
+This creates or reuses one synthetic `did:plc:backuprestorecheck` hog, stores a fresh challenge, and clears the previous verification timestamp. Create a manual volume backup after the command completes. Restore that backup to a temporary PostgreSQL service in the same project and environment. Give the temporary service and volume a named owner and deletion deadline.
+
+Temporarily add `RESTORE_DATABASE_URL=${{RestoredPostgres.DATABASE_URL}}` to the app service, using the restored service's actual name, and redeploy the same reviewed commit. In an app SSH session run:
+
+```sh
+npm run backup:verify
+```
+
+The verifier requires both databases to contain the prepared challenge and identical synthetic hog state. It writes a random probe to the restore target and refuses verification if the source can see that probe, preventing the production database from being accepted as its own restore. A successful result records the verification time and both measured database sizes in production for `/owner`, then consumes the challenge so the same restore cannot refresh that timestamp. Run `backup:prepare` again before every later restore test.
+
+Remove `RESTORE_DATABASE_URL`, delete the temporary restored service and its volume, and confirm they no longer appear in project resources. Do not delete the production volume or retained synthetic fixture. Record the backup schedule, backup timestamp, restore verification timestamp, and cleanup in operating notes. Repeat the restore test before risky migrations and periodically while the alpha contains valued progress.
+
+## 6. Verify live OAuth and launch controls
+
+On the generated HTTPS origin, test an invited owner login, an invited non-owner login, a non-invited denial, logout, and a malformed or replayed callback rejection. Confirm the app requests identity only and cannot post.
+
+The app measures PostgreSQL size during startup, at most every 15 minutes on registration or game writes, and whenever an owner opens `/owner`. The 1 GB internal budget warns at 70%, blocks registrations and future card creation at 85%, and rejects new game state changes at 95%. Existing idempotent action receipts remain readable. Provider volume capacity and backup storage need separate Railway headroom.
+
+To close signup, set `features.registrations` to `false` in `config/cost-policy.json`, run the checks, and manually deploy that reviewed commit. To block registration, future card creation, and new game state changes together, set `features.readOnlyMode` to `true` and do the same. Do not edit the thresholds upward: validation allows only the approved ceilings. Record why and when a control changed.
+
+## Operating record
+
+Keep this outside the repository if it contains private project details. Record the Railway workspace, project, environment, service identifiers, generated URL, deployed commit, resource settings, spending controls, restart results, daily backup retention, restore verification, temporary-resource cleanup, and first-day and first-week usage reviews.
 
 ## Failed deployment and recovery
 
@@ -76,4 +111,6 @@ For code-only regressions, select the previous successful image and verify it ag
 
 If the spending cutoff fires, inspect usage and stop the cause before resuming. Do not raise the cap automatically. Pausing the app does not remove database, volume, or backup charges.
 
-Before inviting players, complete SH-006b: daily backups, a demonstrated restore, database growth thresholds, and the remaining operational controls. Verify login, denial, logout, and callback rejection on the generated HTTPS origin. A later domain change requires updating `APP_ORIGIN`, OAuth metadata, and callbacks together.
+For a database incident, set read-only mode before recovery if the current database is still writable. Restore only after identifying the correct backup and preserving the current volume when practical. Run `backup:verify` against the candidate restore before switching any connection. Never modify an applied migration or reverse SQL blindly.
+
+Before inviting players, every live item above must be recorded, including a demonstrated restore. A later domain change requires updating `APP_ORIGIN`, OAuth metadata, and callbacks together.

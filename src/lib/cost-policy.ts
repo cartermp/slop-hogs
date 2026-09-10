@@ -12,19 +12,27 @@ const limitCeilings = {
   externalRequestTimeoutMs: 5_000,
   externalResponseMaxBytes: 1_000_000,
 } as const;
+const databaseCeilings = {
+  maxBytes: 1_000_000_000,
+  warningPercent: 70,
+  restrictPercent: 85,
+  readOnlyPercent: 95,
+} as const;
 const featureNames = [
-  "registrations", "externalPreviews", "cardRendering", "activityImports", "paidAi",
+  "registrations", "readOnlyMode", "externalPreviews", "cardRendering", "activityImports", "paidAi",
 ] as const;
-const implementedFeatures = new Set<(typeof featureNames)[number]>(["registrations"]);
+const implementedFeatures = new Set<(typeof featureNames)[number]>(["registrations", "readOnlyMode"]);
 
 type Limits = { [K in keyof typeof limitCeilings]: number };
-type Features = { registrations: boolean } & {
-  [K in Exclude<typeof featureNames[number], "registrations">]: false
+type DatabasePolicy = { [K in keyof typeof databaseCeilings]: number };
+type Features = { registrations: boolean; readOnlyMode: boolean } & {
+  [K in Exclude<typeof featureNames[number], "registrations" | "readOnlyMode">]: false
 };
 export interface CostPolicy {
-  version: 1;
+  version: 2;
   railway: { usageAlertCents: number; computeHardLimitCents: number };
   limits: Limits;
+  database: DatabasePolicy;
   features: Features;
   paidAiMonthlyBudgetCents: 0;
 }
@@ -49,8 +57,8 @@ function positiveInteger(value: unknown, ceiling: number, path: string): number 
 
 export function parseCostPolicy(input: unknown): CostPolicy {
   const root = objectWithKeys(input,
-    ["version", "railway", "limits", "features", "paidAiMonthlyBudgetCents"], "cost policy");
-  if (root.version !== 1) throw new Error("Unsupported cost policy version");
+    ["version", "railway", "limits", "database", "features", "paidAiMonthlyBudgetCents"], "cost policy");
+  if (root.version !== 2) throw new Error("Unsupported cost policy version");
   const provider = objectWithKeys(root.railway, ["usageAlertCents", "computeHardLimitCents"], "railway");
   const railway = {
     usageAlertCents: positiveInteger(provider.usageAlertCents, 1_500, "railway.usageAlertCents"),
@@ -65,6 +73,13 @@ export function parseCostPolicy(input: unknown): CostPolicy {
   if (limits.cardMaxBytes > limits.cardStorageMaxBytes) {
     throw new Error("One card must fit within the total card storage budget");
   }
+  const rawDatabase = objectWithKeys(root.database, Object.keys(databaseCeilings), "database");
+  const database = Object.fromEntries(Object.entries(databaseCeilings).map(([key, ceiling]) =>
+    [key, positiveInteger(rawDatabase[key], ceiling, `database.${key}`)])) as DatabasePolicy;
+  if (!(database.warningPercent < database.restrictPercent
+    && database.restrictPercent < database.readOnlyPercent)) {
+    throw new Error("Database thresholds must increase from warning to restriction to read-only");
+  }
   const rawFeatures = objectWithKeys(root.features, featureNames, "features");
   for (const name of featureNames) {
     if (typeof rawFeatures[name] !== "boolean") {
@@ -76,9 +91,10 @@ export function parseCostPolicy(input: unknown): CostPolicy {
   }
   if (root.paidAiMonthlyBudgetCents !== 0) throw new Error("Paid AI budget must be zero");
   return {
-    version: 1, railway, limits,
+    version: 2, railway, limits, database,
     features: {
       registrations: rawFeatures.registrations as boolean,
+      readOnlyMode: rawFeatures.readOnlyMode as boolean,
       externalPreviews: false,
       cardRendering: false,
       activityImports: false,

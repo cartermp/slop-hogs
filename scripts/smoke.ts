@@ -62,7 +62,9 @@ try {
   assert.equal(jwks.keys[0].d, undefined, "JWKS must expose only the public key");
   const gallery = await fetch(`http://127.0.0.1:${port}/gallery`, { signal: AbortSignal.timeout(5_000) });
   assert.equal(gallery.status, 404, "The development art gallery must stay out of production");
-  console.log("Production shell, health, and OAuth metadata endpoints passed.");
+  const owner = await fetch(`http://127.0.0.1:${port}/owner`, { signal: AbortSignal.timeout(5_000) });
+  assert.equal(owner.status, 404, "The owner page must reject anonymous requests");
+  console.log("Production shell, health, OAuth metadata and anonymous owner denial passed.");
 } catch (error) {
   console.error(output);
   throw error;

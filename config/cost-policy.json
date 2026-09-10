@@ -1,5 +1,5 @@
 {
-  "version": 1,
+  "version": 2,
   "railway": {
     "usageAlertCents": 1500,
     "computeHardLimitCents": 3000
@@ -17,8 +17,15 @@
     "externalRequestTimeoutMs": 5000,
     "externalResponseMaxBytes": 1000000
   },
+  "database": {
+    "maxBytes": 1000000000,
+    "warningPercent": 70,
+    "restrictPercent": 85,
+    "readOnlyPercent": 95
+  },
   "features": {
     "registrations": true,
+    "readOnlyMode": false,
     "externalPreviews": false,
     "cardRendering": false,
     "activityImports": false,
