@@ -45,6 +45,13 @@ export function parseOwnerDids(value = ""): ReadonlySet<string> {
   return owners;
 }
 
+export function parseAdmissionDids(invitedValue = "", ownerValue = ""): ReadonlySet<string> {
+  return new Set([
+    ...parseInvitedDids(invitedValue),
+    ...parseOwnerDids(ownerValue),
+  ]);
+}
+
 function parseTrustedProxyCount(value: string | undefined, production: boolean): number {
   if (value === undefined && !production) return 0;
   if (!/^[0-5]$/.test(value ?? "")) throw new Error("TRUSTED_PROXY_COUNT must be an integer from 0 to 5");

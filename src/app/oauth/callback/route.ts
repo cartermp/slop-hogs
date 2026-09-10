@@ -2,7 +2,7 @@ import { NextResponse } from "next/server";
 import { getDatabase } from "@/lib/server/database";
 import { loadCostPolicy } from "@/lib/server/cost-policy";
 import { AccountLimitError, completeOAuthSignIn, NotInvitedError, RegistrationClosedError } from "@/lib/server/hogs";
-import { loadOAuthConfig, parseInvitedDids } from "@/lib/server/oauth-config";
+import { loadOAuthConfig, parseAdmissionDids } from "@/lib/server/oauth-config";
 import { getOAuthClient } from "@/lib/server/oauth";
 
 export const runtime = "nodejs";
@@ -25,7 +25,10 @@ export async function GET(request: Request) {
     const appSession = await completeOAuthSignIn(getDatabase(), oauthSession.did, {
       registrationsEnabled: policy.features.registrations,
       accountLimit: policy.limits.accounts,
-      invitedDids: parseInvitedDids(process.env.BLUESKY_INVITED_DIDS),
+      invitedDids: parseAdmissionDids(
+        process.env.BLUESKY_INVITED_DIDS,
+        process.env.SLOP_HOGS_OWNER_DIDS,
+      ),
       operationalPolicy: {
         database: policy.database,
         readOnlyMode: policy.features.readOnlyMode,
