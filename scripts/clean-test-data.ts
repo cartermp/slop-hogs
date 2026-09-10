@@ -13,6 +13,9 @@ function describeCounts(counts: CleanupCounts): string {
     `${counts.appSessions} session(s)`,
     `${counts.oauthSessions} OAuth session(s)`,
     `${counts.hogActions} action receipt(s)`,
+    `${counts.giftTreats} visitor treat(s)`,
+    `${counts.accountBlocks} account block(s)`,
+    `${counts.giftQuotaRows} gift quota row(s)`,
   ].join(", ");
 }
 

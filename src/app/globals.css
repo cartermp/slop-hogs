@@ -73,8 +73,8 @@ h1 { font-size: clamp(2.8rem, 8vw, 5.6rem); line-height: .98; letter-spacing: -.
 .pen-stats dt { color: #bba9b5; }
 .pen-stats dd { margin: 0; font-weight: 800; }
 
-.hog-controls, .mutation-collection { margin-top: 3rem; border-top: 1px solid #513543; padding-top: 2rem; }
-.hog-controls h2, .mutation-collection h2 { margin: .4rem 0 1.25rem; font-size: clamp(1.7rem, 4vw, 2.5rem); }
+.hog-controls, .mutation-collection, .pen-controls { margin-top: 3rem; border-top: 1px solid #513543; padding-top: 2rem; }
+.hog-controls h2, .mutation-collection h2, .pen-controls h2 { margin: .4rem 0 1.25rem; font-size: clamp(1.7rem, 4vw, 2.5rem); }
 .care-grid, .mutation-grid { display: grid; grid-template-columns: repeat(2, minmax(0, 1fr)); gap: 1rem; }
 .care-card, .mutation-card { border: 1px solid #513543; border-radius: 1rem; padding: 1.25rem; background: #211920; }
 .care-card h3, .mutation-card h3 { margin: 0 0 .55rem; color: #ffc0d8; }
@@ -120,6 +120,51 @@ h1 { font-size: clamp(2.8rem, 8vw, 5.6rem); line-height: .98; letter-spacing: -.
 .post-preview > a { color: #ff9ec3; font-weight: 700; text-underline-offset: .2rem; }
 .feed-form { margin-top: 1.5rem; border-top: 1px solid #513543; padding-top: 1.25rem; }
 .recipe-note { margin: .7rem 0 0; color: #bba9b5; font-size: .82rem; line-height: 1.45; }
+
+.gift-form { max-width: 44rem; margin-top: 2rem; }
+.gift-form label, .block-form label { display: block; margin-bottom: .5rem; color: #ffc0d8; font-size: .85rem; font-weight: 750; }
+.gift-form > div, .block-form > div { display: flex; gap: .65rem; }
+.gift-form select, .block-form input {
+  min-width: 0;
+  flex: 1;
+  border: 1px solid #694356;
+  border-radius: .7rem;
+  padding: .8rem .9rem;
+  background: #211920;
+  color: #fff4f8;
+  font: inherit;
+}
+.pen-settings { display: grid; grid-template-columns: repeat(2, minmax(0, 1fr)); gap: 1rem; }
+.pen-setting, .gift-card, .blocked-account { border: 1px solid #513543; border-radius: 1rem; padding: 1.1rem; background: #211920; }
+.pen-setting > span { display: block; margin-bottom: 1rem; }
+.pen-setting strong, .pen-setting small { display: block; }
+.pen-setting small { margin-top: .3rem; color: #bba9b5; line-height: 1.45; }
+.pen-setting button, .gift-actions button, .block-form button, .blocked-account button {
+  border: 1px solid #8a5870;
+  border-radius: .6rem;
+  padding: .6rem .8rem;
+  background: #2c2028;
+  color: #ffc0d8;
+  font: inherit;
+  font-weight: 750;
+  cursor: pointer;
+}
+.pen-setting button:disabled, .gift-actions button:disabled, .block-form button:disabled, .blocked-account button:disabled {
+  cursor: wait;
+  opacity: .65;
+}
+.public-pen-link { display: inline-block; margin-top: 1rem; color: #ff9ec3; font-weight: 700; text-underline-offset: .25rem; }
+.gift-heading { margin: 2rem 0 1rem; color: #ffc0d8; }
+.gift-grid { display: grid; grid-template-columns: repeat(2, minmax(0, 1fr)); gap: 1rem; }
+.gift-card h3 { margin: .35rem 0; color: #ffc0d8; }
+.gift-card > p:not(.specimen) { color: #bba9b5; line-height: 1.5; }
+.gift-card code, .blocked-account code { overflow-wrap: anywhere; color: #ffc0d8; }
+.gift-actions { display: flex; flex-wrap: wrap; gap: .5rem; }
+.gift-actions form { margin: 0; }
+.gift-actions .auth-button { border: 0; background: #ff8fba; color: #28131e; }
+.block-form { max-width: 44rem; margin-bottom: 1rem; }
+.blocked-account { display: grid; grid-template-columns: minmax(0, 1fr) auto; align-items: center; gap: .75rem; max-width: 44rem; margin-top: .65rem; }
+.blocked-account .action-message { grid-column: 1 / -1; }
 
 .owner-page h1 { margin-bottom: 1rem; }
 .operations-warning {
@@ -218,9 +263,10 @@ h1 { font-size: clamp(2.8rem, 8vw, 5.6rem); line-height: .98; letter-spacing: -.
   .hog-card:first-child .hog-stage { min-height: 19rem; }
   .login-form > div { align-items: stretch; flex-direction: column; }
   .preview-form > div, .feed-form > div { align-items: stretch; flex-direction: column; }
+  .gift-form > div, .block-form > div { align-items: stretch; flex-direction: column; }
   .operations-grid { grid-template-columns: 1fr; }
   .operations-links { align-items: flex-start; flex-direction: column; }
-  .care-grid, .mutation-grid { grid-template-columns: 1fr; }
+  .care-grid, .mutation-grid, .pen-settings, .gift-grid { grid-template-columns: 1fr; }
 }
 
 @media (prefers-reduced-motion: reduce) {

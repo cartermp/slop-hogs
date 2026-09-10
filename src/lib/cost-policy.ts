@@ -5,6 +5,9 @@ const limitCeilings = {
   loginAttemptsGlobalPerHour: 200,
   postLookupsPerAccountPerDay: 12,
   postLookupsGlobalPerHour: 100,
+  giftsPerSenderPerDay: 3,
+  giftsPerRecipientPerDay: 10,
+  pendingGiftsPerRecipient: 20,
   cardsPerAccountPerDay: 2,
   cardsGlobalPerDay: 50,
   cardMaxBytes: 250_000,
@@ -29,7 +32,7 @@ type Features = { registrations: boolean; readOnlyMode: boolean; externalPreview
   [K in Exclude<typeof featureNames[number], "registrations" | "readOnlyMode" | "externalPreviews">]: false
 };
 export interface CostPolicy {
-  version: 2;
+  version: 3;
   railway: { usageAlertCents: number; computeHardLimitCents: number };
   limits: Limits;
   database: DatabasePolicy;
@@ -58,7 +61,7 @@ function positiveInteger(value: unknown, ceiling: number, path: string): number 
 export function parseCostPolicy(input: unknown): CostPolicy {
   const root = objectWithKeys(input,
     ["version", "railway", "limits", "database", "features", "paidAiMonthlyBudgetCents"], "cost policy");
-  if (root.version !== 2) throw new Error("Unsupported cost policy version");
+  if (root.version !== 3) throw new Error("Unsupported cost policy version");
   const provider = objectWithKeys(root.railway, ["usageAlertCents", "computeHardLimitCents"], "railway");
   const railway = {
     usageAlertCents: positiveInteger(provider.usageAlertCents, 1_500, "railway.usageAlertCents"),
@@ -91,7 +94,7 @@ export function parseCostPolicy(input: unknown): CostPolicy {
   }
   if (root.paidAiMonthlyBudgetCents !== 0) throw new Error("Paid AI budget must be zero");
   return {
-    version: 2, railway, limits, database,
+    version: 3, railway, limits, database,
     features: {
       registrations: rawFeatures.registrations as boolean,
       readOnlyMode: rawFeatures.readOnlyMode as boolean,

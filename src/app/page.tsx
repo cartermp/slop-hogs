@@ -2,6 +2,7 @@ import { randomUUID } from "node:crypto";
 import Link from "next/link";
 import { cookies } from "next/headers";
 import { HogControls } from "@/components/HogControls";
+import { PenControls } from "@/components/PenControls";
 import { Hog } from "@/components/hog/Hog";
 import { appearanceForState, BASE_HOG } from "@/components/hog/appearance";
 import { PostFeeder } from "@/components/PostFeeder";
@@ -9,6 +10,7 @@ import { MUTATION_CATALOG } from "@/lib/game";
 import { loadCostPolicy } from "@/lib/server/cost-policy";
 import { getDatabase } from "@/lib/server/database";
 import { getHogView } from "@/lib/server/hogs";
+import { getPenManagement } from "@/lib/server/social";
 
 const messages: Record<string, string> = {
   invalid_callback: "Bluesky could not verify that login. Please start again.",
@@ -24,7 +26,9 @@ export default async function Home({
   searchParams: Promise<Record<string, string | string[] | undefined>>;
 }) {
   const token = (await cookies()).get("slop_hogs_session")?.value;
-  const hog = token ? await getHogView(getDatabase(), token) : null;
+  const [hog, pen] = token
+    ? await Promise.all([getHogView(getDatabase(), token), getPenManagement(getDatabase(), token)])
+    : [null, null];
   const appearance = hog ? appearanceForState(hog.state) : BASE_HOG;
   const query = await searchParams;
   const errorCode = typeof query.auth_error === "string" ? query.auth_error : "";
@@ -77,6 +81,26 @@ export default async function Home({
           {loadCostPolicy().features.externalPreviews
             ? <PostFeeder />
             : <p className="note">Public-post feeding is temporarily disabled.</p>}
+          {pen && (
+            <PenControls
+              pen={{
+                ...pen,
+                pendingGifts: pen.pendingGifts.map(gift => ({
+                  ...gift,
+                  createdAt: gift.createdAt.toISOString(),
+                })),
+              }}
+              requestIds={{
+                visibility: randomUUID(),
+                gifts: randomUUID(),
+                block: randomUUID(),
+                accept: pen.pendingGifts.map(() => randomUUID()),
+                decline: pen.pendingGifts.map(() => randomUUID()),
+                giftBlock: pen.pendingGifts.map(() => randomUUID()),
+                unblock: pen.blockedDids.map(() => randomUUID()),
+              }}
+            />
+          )}
         </>
       ) : (
         <form className="login-form" action="/oauth/login" method="post">

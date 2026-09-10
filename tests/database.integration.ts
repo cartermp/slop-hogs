@@ -1,5 +1,6 @@
 import assert from "node:assert/strict";
 import { randomUUID } from "node:crypto";
+import { readFile } from "node:fs/promises";
 import { test } from "node:test";
 import { createGameState, parseGameState } from "../src/lib/game.ts";
 import { createDatabase, transaction } from "../src/lib/server/database.ts";
@@ -77,8 +78,9 @@ test("real PostgreSQL persistence, retries, isolation and rollback", async () =>
       "INSERT INTO hog_lives(id, owner_did, state, ended_at) VALUES ($1,$2,$3,clock_timestamp())",
       [legacyHog, legacyDid, { ...legacyState, rulesVersion: 1 }],
     );
-    await pool.query("DELETE FROM schema_migrations WHERE name='005_mutations_and_care.sql'");
-    await migrate(pool);
+    await pool.query(
+      await readFile(new URL("../migrations/005_mutations_and_care.sql", import.meta.url), "utf8"),
+    );
     const upgradedLegacy = parseGameState(
       (await pool.query("SELECT state FROM hog_lives WHERE id=$1", [legacyHog])).rows[0].state,
     );
@@ -485,6 +487,9 @@ test("real PostgreSQL persistence, retries, isolation and rollback", async () =>
       appSessions: 4,
       oauthSessions: 1,
       hogActions: 10,
+      giftTreats: 0,
+      accountBlocks: 0,
+      giftQuotaRows: 0,
     });
     assert.deepEqual(await deleteTestData(pool, testDids), {
       accounts: 5,
@@ -492,6 +497,9 @@ test("real PostgreSQL persistence, retries, isolation and rollback", async () =>
       appSessions: 4,
       oauthSessions: 1,
       hogActions: 10,
+      giftTreats: 0,
+      accountBlocks: 0,
+      giftQuotaRows: 0,
     });
     assert.deepEqual(await previewTestDataCleanup(pool, testDids), {
       accounts: 0,
@@ -499,6 +507,9 @@ test("real PostgreSQL persistence, retries, isolation and rollback", async () =>
       appSessions: 0,
       oauthSessions: 0,
       hogActions: 0,
+      giftTreats: 0,
+      accountBlocks: 0,
+      giftQuotaRows: 0,
     });
     const backupCheck = await prepareBackupRestoreCheck(pool);
     assert.match(backupCheck.challenge, /^[0-9a-f-]{36}$/);
