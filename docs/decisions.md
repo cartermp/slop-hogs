@@ -10,3 +10,4 @@
 - Keep deployment manual. Do not create cloud resources or change spending limits as a side effect of routine development.
 - Use the official `@atproto/oauth-client-node` SDK with only the base `atproto` identity scope. Store its state and provider sessions encrypted in PostgreSQL, coordinate refreshes with advisory locks, and give browsers a separate opaque application cookie.
 - Keep alpha signup invite-only through a server-side DID allowlist. Existing verified accounts may return after removal from the allowlist; new accounts still obey the atomic 50-account policy cap.
+- Identify public pens with random stable UUIDs rather than DIDs. Public reads expose prepared hog state only and perform no provider lookup. Visitor treats require an application session, reserve sender and recipient daily quotas atomically, and remain inert until the recipient accepts one through the normal meal transaction.

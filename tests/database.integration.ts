@@ -1,5 +1,6 @@
 import assert from "node:assert/strict";
 import { randomUUID } from "node:crypto";
+import { readFile } from "node:fs/promises";
 import { test } from "node:test";
 import { createGameState, parseGameState } from "../src/lib/game.ts";
 import { createDatabase, transaction } from "../src/lib/server/database.ts";
@@ -77,8 +78,9 @@ test("real PostgreSQL persistence, retries, isolation and rollback", async () =>
       "INSERT INTO hog_lives(id, owner_did, state, ended_at) VALUES ($1,$2,$3,clock_timestamp())",
       [legacyHog, legacyDid, { ...legacyState, rulesVersion: 1 }],
     );
-    await pool.query("DELETE FROM schema_migrations WHERE name='005_mutations_and_care.sql'");
-    await migrate(pool);
+    await pool.query(
+      await readFile(new URL("../migrations/005_mutations_and_care.sql", import.meta.url), "utf8"),
+    );
     const upgradedLegacy = parseGameState(
       (await pool.query("SELECT state FROM hog_lives WHERE id=$1", [legacyHog])).rows[0].state,
     );

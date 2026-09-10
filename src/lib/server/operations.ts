@@ -173,6 +173,8 @@ export interface OwnerOperations {
   accountCount: number;
   loginAttemptsThisHour: number;
   postLookupsThisHour: number;
+  giftsToday: number;
+  pendingGifts: number;
   cardStorageBytes: number;
   backupPreparedAt: Date | null;
   backupVerifiedAt: Date | null;
@@ -189,6 +191,8 @@ export async function getOwnerOperations(
       account_count: number;
       login_attempts: number;
       post_lookups: number;
+      gifts_today: number;
+      pending_gifts: number;
       prepared_at: Date | null;
       verified_at: Date | null;
       restored_size: string | null;
@@ -203,6 +207,11 @@ export async function getOwnerOperations(
           SELECT lookups FROM post_lookup_global_hourly
            WHERE bucket_start=date_trunc('hour', clock_timestamp() AT TIME ZONE 'UTC') AT TIME ZONE 'UTC'
         ), 0)::integer AS post_lookups,
+        COALESCE((
+         SELECT sum(gifts) FROM gift_recipient_daily
+          WHERE bucket_start=(clock_timestamp() AT TIME ZONE 'UTC')::date
+        ), 0)::integer AS gifts_today,
+        (SELECT count(*)::integer FROM gift_treats WHERE status='pending') AS pending_gifts,
         (SELECT prepared_at FROM backup_restore_checks WHERE id=true) AS prepared_at,
         (SELECT verified_at FROM backup_restore_checks WHERE id=true) AS verified_at,
         (SELECT restored_database_size_bytes::text FROM backup_restore_checks WHERE id=true) AS restored_size
@@ -213,6 +222,8 @@ export async function getOwnerOperations(
       accountCount: row.account_count,
       loginAttemptsThisHour: row.login_attempts,
       postLookupsThisHour: row.post_lookups,
+      giftsToday: row.gifts_today,
+      pendingGifts: row.pending_gifts,
       cardStorageBytes: 0,
       backupPreparedAt: row.prepared_at,
       backupVerifiedAt: row.verified_at,

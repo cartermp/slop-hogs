@@ -17,6 +17,14 @@ test("committed policy enables only enforced controls and keeps paid AI closed",
     .every(([, value]) => value === false));
   assert.equal(policy.paidAiMonthlyBudgetCents, 0);
   assert.equal(policy.railway.computeHardLimitCents, 3_000);
+  assert.deepEqual(
+    {
+      sender: policy.limits.giftsPerSenderPerDay,
+      recipient: policy.limits.giftsPerRecipientPerDay,
+      pending: policy.limits.pendingGiftsPerRecipient,
+    },
+    { sender: 3, recipient: 10, pending: 20 },
+  );
 });
 
 test("every quota rejects zero, negative, fractional, nonnumeric and excessive values", () => {

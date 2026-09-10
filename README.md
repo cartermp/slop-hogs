@@ -2,7 +2,7 @@
 
 A Bluesky-linked virtual pet with a terrible diet. Built by one developer and Codex in small asynchronous tasks.
 
-SH-008 adds eight collectable mutations, mutation-composed live art, built-in meals, and cooldown-protected cleaning. Supported Bluesky post URLs still resolve to canonical AT URIs, lookup work is quota-bound, and one hog cannot eat the same canonical post twice.
+SH-009 adds stable public pen links, bounded visitor treats, owner-controlled visibility and gift intake, and account blocks. A visitor can only queue a treat; it changes the hog only when the owner accepts it as a normal meal.
 
 ## Run locally
 
@@ -16,7 +16,7 @@ npm run dev
 
 If you use nvm and need to install the pinned default, run `nvm install` and `nvm use` first.
 
-Open http://localhost:3000. The shell and local gallery do not require a provider account. Public-post feeding requires the PostgreSQL and OAuth configuration below.
+Open http://localhost:3000. The shell and local gallery do not require a provider account. Public pens are viewable without signing in; managing a pen, sending treats, and public-post feeding require the PostgreSQL and OAuth configuration below.
 
 In development, open http://localhost:3000/gallery to compare the mutation-composed six-meal AI image, generated post, chatbot screenshot, human post, and shitpost builds. The gallery returns a normal not-found page in production.
 
@@ -44,7 +44,7 @@ npm run simulate
 
 ## Cost boundary
 
-`config/cost-policy.json` holds the approved initial limits. Startup refuses missing, malformed, or unsafe settings. Invite-only registration and external previews are enabled. New public lookups are limited to 12 per account per UTC day and 100 globally per hour; cached previews do not spend lookup quota. The app records database size at startup and at most every 15 minutes during writes. It warns at 70% of the 1 GB internal budget, blocks registrations and cards at 85%, and rejects new game state changes at 95%. `features.readOnlyMode` is the manual emergency stop.
+`config/cost-policy.json` holds the approved initial limits. Startup refuses missing, malformed, or unsafe settings. Invite-only registration and external previews are enabled. New public lookups are limited to 12 per account per UTC day and 100 globally per hour; cached previews do not spend lookup quota. Visitor treats are limited to three sent per account per UTC day, ten received per pen per day, one sender-to-pen gift per day, and 20 pending gifts per active hog. The app records database size at startup and at most every 15 minutes during writes. It warns at 70% of the 1 GB internal budget, blocks registrations and cards at 85%, and rejects new game state changes at 95%. `features.readOnlyMode` is the manual emergency stop.
 
 The Railway dollar values are **configuration targets, not a billing cap applied by this code**. Configure the workspace dashboard before deployment. Request quotas must be implemented atomically with each future feature before enabling it. See [cost controls](docs/cost-controls.md).
 
@@ -57,4 +57,4 @@ The owner-only `/owner` page shows application feature flags, implemented quota 
 - [Architecture decisions](docs/decisions.md)
 - [Cost controls and deployment gate](docs/cost-controls.md)
 
-Railway is the intended host. Repository support through SH-008 is complete, but no hosted resource or dashboard setting can be verified from source control and CI does not deploy. Complete the live checklist in the runbook before inviting players. The next product task is SH-009.
+Railway is the intended host. Repository support through SH-009 is complete, but no hosted resource or dashboard setting can be verified from source control and CI does not deploy. Complete the live checklist in the runbook before inviting players. The next product task is SH-010.
