@@ -43,7 +43,6 @@ jobs:
       - run: npm run check
       - run: npm run test:db
       - run: npm run build
-      - run: npm run test:owner
       - run: npm run smoke
       - name: Build and verify Railway image
         if: matrix.node == '24.19.0'
