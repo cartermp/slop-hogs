@@ -30,7 +30,7 @@
     "registrations": true,
     "readOnlyMode": false,
     "externalPreviews": true,
-    "cardRendering": false,
+    "cardRendering": true,
     "activityImports": false,
     "paidAi": false
   },

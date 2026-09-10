@@ -3,6 +3,7 @@ import Link from "next/link";
 import { cookies } from "next/headers";
 import { HogControls } from "@/components/HogControls";
 import { PenControls } from "@/components/PenControls";
+import { ShareControls } from "@/components/ShareControls";
 import { Hog } from "@/components/hog/Hog";
 import { appearanceForState, BASE_HOG } from "@/components/hog/appearance";
 import { PostFeeder } from "@/components/PostFeeder";
@@ -10,6 +11,7 @@ import { MUTATION_CATALOG } from "@/lib/game";
 import { loadCostPolicy } from "@/lib/server/cost-policy";
 import { getDatabase } from "@/lib/server/database";
 import { getHogView } from "@/lib/server/hogs";
+import { getShareEvents } from "@/lib/server/share-cards";
 import { getPenManagement } from "@/lib/server/social";
 
 const messages: Record<string, string> = {
@@ -26,9 +28,14 @@ export default async function Home({
   searchParams: Promise<Record<string, string | string[] | undefined>>;
 }) {
   const token = (await cookies()).get("slop_hogs_session")?.value;
-  const [hog, pen] = token
-    ? await Promise.all([getHogView(getDatabase(), token), getPenManagement(getDatabase(), token)])
-    : [null, null];
+  const [hog, pen, shareEvents] = token
+    ? await Promise.all([
+        getHogView(getDatabase(), token),
+        getPenManagement(getDatabase(), token),
+        getShareEvents(getDatabase(), token),
+      ])
+    : [null, null, []];
+  const policy = loadCostPolicy();
   const appearance = hog ? appearanceForState(hog.state) : BASE_HOG;
   const query = await searchParams;
   const errorCode = typeof query.auth_error === "string" ? query.auth_error : "";
@@ -78,7 +85,8 @@ export default async function Home({
               })}
             </div>
           </section>
-          {loadCostPolicy().features.externalPreviews
+          <ShareControls events={shareEvents} cardsEnabled={policy.features.cardRendering} />
+          {policy.features.externalPreviews
             ? <PostFeeder />
             : <p className="note">Public-post feeding is temporarily disabled.</p>}
           {pen && (
