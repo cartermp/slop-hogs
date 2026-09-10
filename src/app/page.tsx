@@ -2,15 +2,17 @@ import { randomUUID } from "node:crypto";
 import Link from "next/link";
 import { cookies } from "next/headers";
 import { HogControls } from "@/components/HogControls";
+import { NextGenerationControls } from "@/components/NextGenerationControls";
 import { PenControls } from "@/components/PenControls";
 import { ShareControls } from "@/components/ShareControls";
+import { Tombstone } from "@/components/Tombstone";
 import { Hog } from "@/components/hog/Hog";
 import { appearanceForState, BASE_HOG } from "@/components/hog/appearance";
 import { PostFeeder } from "@/components/PostFeeder";
 import { MUTATION_CATALOG } from "@/lib/game";
 import { loadCostPolicy } from "@/lib/server/cost-policy";
 import { getDatabase } from "@/lib/server/database";
-import { getHogView } from "@/lib/server/hogs";
+import { getHogProfile } from "@/lib/server/lifecycle";
 import { getShareEvents } from "@/lib/server/share-cards";
 import { getPenManagement } from "@/lib/server/social";
 
@@ -28,13 +30,15 @@ export default async function Home({
   searchParams: Promise<Record<string, string | string[] | undefined>>;
 }) {
   const token = (await cookies()).get("slop_hogs_session")?.value;
-  const [hog, pen, shareEvents] = token
+  const [profile, pen, shareEvents] = token
     ? await Promise.all([
-        getHogView(getDatabase(), token),
+        getHogProfile(getDatabase(), token),
         getPenManagement(getDatabase(), token),
         getShareEvents(getDatabase(), token),
       ])
     : [null, null, []];
+  const hog = profile?.active ?? null;
+  const latestTombstone = profile?.tombstones[0] ?? null;
   const policy = loadCostPolicy();
   const appearance = hog ? appearanceForState(hog.state) : BASE_HOG;
   const query = await searchParams;
@@ -45,50 +49,75 @@ export default async function Home({
   return (
     <main>
       <p className="eyebrow">Slop Hogs</p>
-      <h1>A small pig.<br />A terrible appetite.</h1>
-      <div className="pen">
-        <div className="pen-art"><Hog appearance={appearance} /></div>
-        <div className="pen-copy">
-          <p className="pen-label">{hog ? appearance.name : "Your hog is almost ready."}</p>
-          <p>{hog
-            ? <>{appearance.description}<br />Verified owner: <code>{hog.ownerDid}</code><br />Hog: <code>{hog.hogId}</code></>
-            : "Sign in with Bluesky to claim one private-alpha hog. Slop Hogs requests identity only and cannot post for you."}</p>
-          {hog && (
+      <h1>{profile && !hog
+        ? <>One hog down.<br />The pen remembers.</>
+        : <>A small pig.<br />A terrible appetite.</>}</h1>
+      {hog ? (
+        <div className="pen">
+          <div className="pen-art"><Hog appearance={appearance} /></div>
+          <div className="pen-copy">
+            <p className="pen-label">{appearance.name}</p>
+            <p>
+              {appearance.description}<br />
+              Generation {hog.generation}<br />
+              Verified owner: <code>{hog.ownerDid}</code><br />
+              Hog: <code>{hog.hogId}</code>
+            </p>
             <dl className="pen-stats">
               <div><dt>Meals</dt><dd>{hog.state.mealsAvailable}/6</dd></div>
               <div><dt>Hunger</dt><dd>{hog.state.hunger}</dd></div>
               <div><dt>Filth</dt><dd>{hog.state.stats.filth}</dd></div>
               <div><dt>Joy</dt><dd>{hog.state.stats.joy}</dd></div>
             </dl>
-          )}
+          </div>
         </div>
-      </div>
+      ) : latestTombstone ? (
+        <Tombstone tombstone={latestTombstone} featured />
+      ) : (
+        <div className="pen">
+          <div className="pen-art"><Hog appearance={BASE_HOG} /></div>
+          <div className="pen-copy">
+            <p className="pen-label">{profile ? "The pen is empty." : "Your hog is almost ready."}</p>
+            <p>{profile
+              ? "This account has no active or completed hog life."
+              : "Sign in with Bluesky to claim one private-alpha hog. Slop Hogs requests identity only and cannot post for you."}</p>
+          </div>
+        </div>
+      )}
       {notice && <p className={errorCode ? "auth-notice auth-error" : "auth-notice"}>{notice}</p>}
-      {hog ? (
+      {profile ? (
         <>
           <form action="/oauth/logout" method="post"><button className="auth-button" type="submit">Sign out</button></form>
-          <HogControls feedRequestId={randomUUID()} cleanRequestId={randomUUID()} />
-          <section className="mutation-collection" aria-labelledby="collection-title">
-            <p className="eyebrow">Mutation collection</p>
-            <h2 id="collection-title">{hog.state.discoveries.length} of {MUTATION_CATALOG.length} bad ideas discovered.</h2>
-            <div className="mutation-grid">
-              {MUTATION_CATALOG.map(mutation => {
-                const discovered = hog.state.discoveries.includes(mutation.id);
-                const equipped = hog.state.equippedMutations.includes(mutation.id);
-                return (
-                  <article className={discovered ? "mutation-card" : "mutation-card mutation-locked"} key={mutation.id}>
-                    <p className="specimen">{equipped ? "Equipped" : discovered ? mutation.slot : "Undiscovered"}</p>
-                    <h3>{discovered ? mutation.name : "???"}</h3>
-                    <p>{discovered ? mutation.description : "Keep feeding deliberate diets to reveal this mutation."}</p>
-                  </article>
-                );
-              })}
-            </div>
-          </section>
+          {hog ? (
+            <>
+              <HogControls feedRequestId={randomUUID()} cleanRequestId={randomUUID()} />
+              <section className="mutation-collection" aria-labelledby="collection-title">
+                <p className="eyebrow">Mutation collection</p>
+                <h2 id="collection-title">{hog.state.discoveries.length} of {MUTATION_CATALOG.length} bad ideas discovered.</h2>
+                <div className="mutation-grid">
+                  {MUTATION_CATALOG.map(mutation => {
+                    const discovered = hog.state.discoveries.includes(mutation.id);
+                    const equipped = hog.state.equippedMutations.includes(mutation.id);
+                    return (
+                      <article className={discovered ? "mutation-card" : "mutation-card mutation-locked"} key={mutation.id}>
+                        <p className="specimen">{equipped ? "Equipped" : discovered ? mutation.slot : "Undiscovered"}</p>
+                        <h3>{discovered ? mutation.name : "???"}</h3>
+                        <p>{discovered ? mutation.description : "Keep feeding deliberate diets to reveal this mutation."}</p>
+                      </article>
+                    );
+                  })}
+                </div>
+              </section>
+            </>
+          ) : latestTombstone ? (
+            <NextGenerationControls />
+          ) : (
+            <p className="auth-notice auth-error">This account needs repair before another hog can enter the pen.</p>
+          )}
           <ShareControls events={shareEvents} cardsEnabled={policy.features.cardRendering} />
-          {policy.features.externalPreviews
+          {hog && policy.features.externalPreviews
             ? <PostFeeder />
-            : <p className="note">Public-post feeding is temporarily disabled.</p>}
+            : hog ? <p className="note">Public-post feeding is temporarily disabled.</p> : null}
           {pen && (
             <PenControls
               pen={{
@@ -108,6 +137,17 @@ export default async function Home({
                 unblock: pen.blockedDids.map(() => randomUUID()),
               }}
             />
+          )}
+          {profile.tombstones.length > (hog ? 0 : 1) && (
+            <section className="life-history" aria-labelledby="life-history-title">
+              <p className="eyebrow">Family plot</p>
+              <h2 id="life-history-title">Previous bad decisions.</h2>
+              <div className="tombstone-grid">
+                {profile.tombstones.slice(hog ? 0 : 1).map(tombstone => (
+                  <Tombstone key={tombstone.hogId} tombstone={tombstone} />
+                ))}
+              </div>
+            </section>
           )}
         </>
       ) : (

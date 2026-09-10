@@ -1,13 +1,15 @@
 import { FOOD_KINDS, type FoodKind, type GameResult, type GameState } from "./game.ts";
+import type { TombstoneView } from "./server/lifecycle.ts";
 
 export const GIFT_STATUSES = ["pending", "accepted", "declined"] as const;
 export type GiftStatus = (typeof GIFT_STATUSES)[number];
 
 export interface PublicPen {
   penId: string;
-  hogId: string;
-  state: GameState;
+  hogId: string | null;
+  state: GameState | null;
   giftsEnabled: boolean;
+  tombstones: TombstoneView[];
 }
 
 export interface PendingGift {

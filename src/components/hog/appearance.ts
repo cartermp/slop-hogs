@@ -1,4 +1,5 @@
 import {
+  FOOD_KINDS,
   favoriteFood,
   type FoodKind,
   type GameState,
@@ -130,4 +131,41 @@ export function appearanceForState(
       ...(favorite === null ? {} : DIET_BASE_APPEARANCE[favorite]),
     },
   );
+}
+
+export function parseHogAppearance(input: unknown): HogAppearance {
+  if (typeof input !== "object" || input === null || Array.isArray(input)) {
+    throw new Error("Frozen hog appearance must be an object");
+  }
+  const appearance = input as Record<string, unknown>;
+  const expected = [
+    "artVersion", "variant", "name", "description", "body", "eyes", "mouth",
+    "outfit", "back", "effect",
+  ];
+  const keys = Object.keys(appearance).sort();
+  if (keys.length !== expected.length || keys.some((key, index) => key !== [...expected].sort()[index])) {
+    throw new Error("Frozen hog appearance has missing or unknown fields");
+  }
+  if (
+    appearance.artVersion !== ART_VERSION
+    || typeof appearance.variant !== "string"
+    || !["base", ...FOOD_KINDS].includes(appearance.variant)
+    || typeof appearance.name !== "string"
+    || typeof appearance.description !== "string"
+    || typeof appearance.body !== "string"
+    || !["small", "round", "huge", "lean"].includes(appearance.body)
+    || typeof appearance.eyes !== "string"
+    || !["plain", "wet", "cursor", "judging", "shades"].includes(appearance.eyes)
+    || typeof appearance.mouth !== "string"
+    || !["smile", "veneers", "flat", "grin"].includes(appearance.mouth)
+    || typeof appearance.outfit !== "string"
+    || !["none", "blazer", "cap"].includes(appearance.outfit)
+    || typeof appearance.back !== "string"
+    || !["none", "keyboard"].includes(appearance.back)
+    || typeof appearance.effect !== "string"
+    || !["none", "sparkles", "chat", "flies"].includes(appearance.effect)
+  ) {
+    throw new Error("Frozen hog appearance is invalid");
+  }
+  return appearance as HogAppearance;
 }

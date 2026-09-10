@@ -6,6 +6,7 @@ import type { GiftAcceptance, GiftReceipt, PenManagement, PublicPen } from "../s
 import { loadCostPolicy } from "./cost-policy.ts";
 import { transaction } from "./database.ts";
 import { isValidDid } from "./dids.ts";
+import { getTombstonesForOwner, recordLifeEnding } from "./lifecycle.ts";
 import { ReadOnlyError, refreshOperationalStatusForPool, type OperationalPolicy } from "./operations.ts";
 
 const uuid = /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i;
@@ -59,26 +60,29 @@ export async function getPublicPen(pool: Pool, penId: string): Promise<PublicPen
   if (!uuid.test(penId)) return null;
   const result = await pool.query<{
     public_id: string;
-    hog_id: string;
-    state: unknown;
+    owner_did: string;
+    hog_id: string | null;
+    state: unknown | null;
     gifts_enabled: boolean;
     now_ms: number;
   }>(
-    `SELECT account.public_id, hog.id AS hog_id, hog.state, account.gifts_enabled,
+    `SELECT account.public_id, account.did AS owner_did, hog.id AS hog_id, hog.state,
+            account.gifts_enabled,
             floor(extract(epoch FROM clock_timestamp()) * 1000)::float8 AS now_ms
        FROM accounts account
-       JOIN hog_lives hog ON hog.owner_did=account.did AND hog.ended_at IS NULL
+       LEFT JOIN hog_lives hog ON hog.owner_did=account.did AND hog.ended_at IS NULL
       WHERE account.public_id=$1 AND account.pen_public`,
     [penId],
   );
   if (!result.rowCount) return null;
   const row = result.rows[0];
-  const state = parseGameState(row.state);
+  const state = row.state === null ? null : parseGameState(row.state);
   return {
     penId: row.public_id,
     hogId: row.hog_id,
-    state: advanceGameTime(state, Math.max(row.now_ms, state.updatedAtMs)).state,
+    state: state ? advanceGameTime(state, Math.max(row.now_ms, state.updatedAtMs)).state : null,
     giftsEnabled: row.gifts_enabled,
+    tombstones: await getTombstonesForOwner(pool, row.owner_did),
   };
 }
 
@@ -377,6 +381,7 @@ export async function acceptGift(
       "INSERT INTO hog_actions(hog_id, request_id, action, result) VALUES ($1,$2,$3,$4)",
       [giftRow.hog_id, requestId, action, result],
     );
+    await recordLifeEnding(client, giftRow.hog_id, requestId, result);
     await client.query(
       `UPDATE gift_treats
           SET status='accepted', accepted_request_id=$2, decided_at=clock_timestamp()

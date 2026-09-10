@@ -73,8 +73,8 @@ h1 { font-size: clamp(2.8rem, 8vw, 5.6rem); line-height: .98; letter-spacing: -.
 .pen-stats dt { color: #bba9b5; }
 .pen-stats dd { margin: 0; font-weight: 800; }
 
-.hog-controls, .mutation-collection, .pen-controls, .share-controls { margin-top: 3rem; border-top: 1px solid #513543; padding-top: 2rem; }
-.hog-controls h2, .mutation-collection h2, .pen-controls h2, .share-controls h2 { margin: .4rem 0 1.25rem; font-size: clamp(1.7rem, 4vw, 2.5rem); }
+.hog-controls, .mutation-collection, .pen-controls, .share-controls, .next-generation, .life-history { margin-top: 3rem; border-top: 1px solid #513543; padding-top: 2rem; }
+.hog-controls h2, .mutation-collection h2, .pen-controls h2, .share-controls h2, .next-generation h2, .life-history h2 { margin: .4rem 0 1.25rem; font-size: clamp(1.7rem, 4vw, 2.5rem); }
 .care-grid, .mutation-grid { display: grid; grid-template-columns: repeat(2, minmax(0, 1fr)); gap: 1rem; }
 .care-card, .mutation-card { border: 1px solid #513543; border-radius: 1rem; padding: 1.25rem; background: #211920; }
 .care-card h3, .mutation-card h3 { margin: 0 0 .55rem; color: #ffc0d8; }
@@ -199,6 +199,27 @@ h1 { font-size: clamp(2.8rem, 8vw, 5.6rem); line-height: .98; letter-spacing: -.
 .share-speech { max-width: 46rem; margin: 2rem 0; border-left: 4px solid #ff8fba; padding-left: 1.25rem; color: #ffc0d8; font-size: clamp(1.3rem, 3vw, 2rem); line-height: 1.45; }
 .stored-share-card { display: block; width: 100%; height: auto; margin: 2rem 0; border: 1px solid #694356; border-radius: 1rem; }
 
+.next-generation > p:not(.eyebrow, .action-message) { max-width: 40rem; color: #bba9b5; line-height: 1.6; }
+.tombstone-grid { display: grid; grid-template-columns: repeat(2, minmax(0, 1fr)); gap: 1rem; }
+.tombstone {
+  overflow: hidden;
+  border: 1px solid #605760;
+  border-radius: 1.25rem 1.25rem .35rem .35rem;
+  background: linear-gradient(145deg, #29242a, #191619);
+  box-shadow: inset 0 0 0 3px rgb(255 255 255 / .025);
+}
+.tombstone-featured { display: grid; grid-template-columns: minmax(15rem, 1fr) minmax(14rem, .8fr); align-items: center; min-height: 25rem; }
+.tombstone-portrait { padding: 1rem; filter: grayscale(.62) saturate(.65); opacity: .82; }
+.tombstone-copy { padding: 1.5rem; }
+.tombstone-copy h3 { margin: .35rem 0 .5rem; color: #e3d9df; font-size: 1.5rem; }
+.tombstone-cause { margin: 0; color: #bba9b5; }
+.tombstone blockquote { margin: 1.25rem 0; border-left: 3px solid #8c7f87; padding-left: 1rem; color: #fff4f8; font-size: 1.08rem; line-height: 1.5; }
+.tombstone-date { color: #9f939b; font-size: .82rem; }
+.tombstone-stats { display: grid; grid-template-columns: repeat(5, minmax(0, 1fr)); gap: .35rem; margin: 1.25rem 0 0; }
+.tombstone-stats div { padding-top: .45rem; border-top: 1px solid #554d52; text-align: center; }
+.tombstone-stats dt { color: #9f939b; font-size: .62rem; letter-spacing: .07em; text-transform: uppercase; }
+.tombstone-stats dd { margin: .2rem 0 0; font-weight: 800; }
+
 .owner-page h1 { margin-bottom: 1rem; }
 .operations-warning {
   margin: 1.5rem 0;
@@ -299,7 +320,8 @@ h1 { font-size: clamp(2.8rem, 8vw, 5.6rem); line-height: .98; letter-spacing: -.
   .gift-form > div, .block-form > div { align-items: stretch; flex-direction: column; }
   .operations-grid { grid-template-columns: 1fr; }
   .operations-links { align-items: flex-start; flex-direction: column; }
-  .care-grid, .mutation-grid, .pen-settings, .gift-grid, .share-grid { grid-template-columns: 1fr; }
+  .care-grid, .mutation-grid, .pen-settings, .gift-grid, .share-grid, .tombstone-grid { grid-template-columns: 1fr; }
+  .tombstone-featured { display: block; }
 }
 
 @media (prefers-reduced-motion: reduce) {

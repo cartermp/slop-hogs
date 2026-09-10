@@ -55,13 +55,17 @@ export async function feedTrayAction(
       { type: "feed", food },
     );
     const discovery = result.events.find(event => event.type === "mutation_discovered");
+    const ending = result.events.find(event => event.type === "life_ended");
     const mutation = discovery?.type === "mutation_discovered"
       ? MUTATION_CATALOG.find(entry => entry.id === discovery.mutation)
       : null;
     revalidatePath("/");
+    revalidatePath("/pen/[penId]", "page");
     return {
       status: "success",
-      message: mutation
+      message: ending?.type === "life_ended"
+        ? `${ending.name}. ${ending.epitaph}`
+        : mutation
         ? `Mutation discovered: ${mutation.name}. ${discovery!.text}`
         : `Meal accepted. ${result.state.mealsAvailable} remain in the tray.`,
       requestId: randomUUID(),
@@ -85,6 +89,7 @@ export async function cleanHogAction(
     const cleaned = result.events.find(event => event.type === "cleaned");
     if (!cleaned || cleaned.type !== "cleaned") throw new Error("Cleaning result is missing");
     revalidatePath("/");
+    revalidatePath("/pen/[penId]", "page");
     return {
       status: "success",
       message: `Washed off ${cleaned.filthRemoved} filth. The trough needs four hours to drain.`,

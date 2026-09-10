@@ -14,12 +14,12 @@ The owner assigns a bounded task; Codex implements it and returns a reviewable P
 | SH-008 | Eight mutations, collection, care and pacing | SH-003, SH-007 | Complete |
 | SH-009 | Public pens, gifts, blocks and owner controls | SH-008 | Complete |
 | SH-010 | Speech templates and capped cards | SH-009 | Complete |
-| SH-011 | One ending, tombstone, next generation | SH-008 | Planned |
+| SH-011 | One ending, tombstone, next generation | SH-008 | Complete |
 | SH-012 | Invited playtest and observed fixes | SH-006 through SH-011 | Planned |
 
 ## Current handoff
 
-SH-010 turns each mutation discovery into a durable public event with one authored, owner-editable speech draft. Only an authenticated owner action can reserve quota and render a card; anonymous event and immutable image reads perform no rendering or external fetching. Per-account and global daily attempts, one in-process render, 250 KB image size, 250 MB total storage, database growth controls, and idempotent successful retries bound the feature. Live Railway spending controls, resource ceilings, HTTPS OAuth, restart persistence, daily backup scheduling, and one restore still require owner verification before players are invited. SH-011 is next.
+SH-011 ends a life only when an accepted meal reaches both 18 lifetime meals and 100 slop. The triggering action receipt stores exactly one terminal event while the database atomically freezes its state, versioned appearance, cause, epitaph, and generation. The stable public pen displays the tombstone while empty, and an authenticated, read-only-aware action starts at most one fresh next generation without deleting earlier lives. Live Railway spending controls, resource ceilings, HTTPS OAuth, restart persistence, daily backup scheduling, and one restore still require owner verification before players are invited. SH-012 invited playtesting is next.
 
 Run `npm ci`, `npm run check`, `npm run build`, and `npm run smoke` to reproduce automated validation. Run `npm run dev`, then open `/gallery` to compare the five appearances at desktop and phone widths.
 
@@ -38,3 +38,7 @@ Serve each enabled pen at a stable opaque public URL without authentication or e
 ## SH-010 acceptance
 
 Create one durable authored speech draft for each mutation discovery, selected from the hog's diet and mutation without any model or remote request. Let the owner edit and copy the draft. Render an immutable PNG only after an authenticated owner request, with durable per-account and global daily attempt quotas, a single in-process renderer, a short deadline, a 250 KB image limit, a 250 MB storage limit, and database growth controls. Successful retries return the stored card without spending quota; failed attempts remain retryable but still count. Public event and image GETs read only existing PostgreSQL rows and never render or fetch externally.
+
+## SH-011 acceptance
+
+Resolve the first ending only during an accepted meal, after at least 18 meals and at 100 slop. Record one terminal event on the idempotent action receipt and atomically freeze the final rules state, appearance version, stats, cause, epitaph, and ending time. Elapsed reads and new request IDs cannot change an ended life, while a retry returns the original terminal result. Keep tombstones under the account's stable public pen and require an authenticated owner action to create exactly one active next generation. Starting over resets gameplay state without deleting prior lives, mutation events, cards, or tombstones.

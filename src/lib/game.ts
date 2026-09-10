@@ -2,7 +2,22 @@ import { FOOD_KINDS, type FoodKind } from "./food.ts";
 
 export { FOOD_KINDS, type FoodKind } from "./food.ts";
 
-export const RULES_VERSION = 2 as const;
+export const RULES_VERSION = 3 as const;
+
+export const ENDING_IDS = ["slop_overload"] as const;
+export type EndingId = (typeof ENDING_IDS)[number];
+
+export const ENDING_CATALOG: ReadonlyArray<{
+  id: EndingId;
+  name: string;
+  cause: string;
+  epitaph: string;
+}> = [{
+  id: "slop_overload",
+  name: "Slop Overload",
+  cause: "One hundred percent slop",
+  epitaph: "It ate the feed. The feed ate back.",
+}];
 
 export const MUTATION_IDS = [
   "glazed_eyes",
@@ -36,6 +51,12 @@ export const MUTATION_CATALOG: ReadonlyArray<{
 
 export type HogStats = { slop: number; mass: number; brain: number; filth: number; joy: number };
 export type Taste = Record<FoodKind, number>;
+export type GameEnding = {
+  id: EndingId;
+  endedAtMs: number;
+  cause: string;
+  epitaph: string;
+};
 
 export type GameState = {
   rulesVersion: typeof RULES_VERSION;
@@ -52,6 +73,7 @@ export type GameState = {
   discoveries: MutationId[];
   equippedMutations: MutationId[];
   lastCleanedAtMs: number | null;
+  ending: GameEnding | null;
 };
 
 export type GameAction =
@@ -63,7 +85,8 @@ export type GameEvent =
   | { type: "fed"; food: FoodKind; digestionBonus: number }
   | { type: "favorite_changed"; favorite: FoodKind | null }
   | { type: "mutation_discovered"; mutation: MutationId; text: string }
-  | { type: "cleaned"; filthRemoved: number; joyGained: number };
+  | { type: "cleaned"; filthRemoved: number; joyGained: number }
+  | { type: "life_ended"; ending: EndingId; name: string; cause: string; epitaph: string };
 
 export type GameResult = { state: GameState; events: GameEvent[] };
 
@@ -74,6 +97,7 @@ export type GameErrorCode =
   | "NO_MEALS_AVAILABLE"
   | "ALREADY_CLEAN"
   | "CLEANING_COOLDOWN"
+  | "LIFE_ENDED"
   | "UNSUPPORTED_RULES_VERSION";
 
 export class GameError extends Error {
@@ -91,6 +115,7 @@ const RECENT_MEAL_LIMIT = 6;
 const MEAL_REFILL_MS = 4 * 60 * 60 * 1_000;
 const HUNGER_TICK_MS = 60 * 60 * 1_000;
 export const CLEANING_COOLDOWN_MS = 4 * 60 * 60 * 1_000;
+export const ENDING_MIN_MEALS = 18;
 const UINT32_MAX = 0xffff_ffff;
 const MAX_COUNTER = Number.MAX_SAFE_INTEGER;
 
@@ -178,6 +203,7 @@ export function createGameState(serverTimeMs: number, seed: number): GameState {
     discoveries: [],
     equippedMutations: [],
     lastCleanedAtMs: null,
+    ending: null,
   };
 }
 
@@ -204,6 +230,9 @@ export function applyGameAction(savedState: unknown, actionInput: unknown, serve
   const state = parseGameState(savedState);
   const action = parseGameAction(actionInput);
   const advanced = advanceGameTime(state, serverTimeMs);
+  if (advanced.state.ending) {
+    throw new GameError("LIFE_ENDED", "the hog life has ended");
+  }
   if (action.type === "clean") return applyCleanAction(advanced, serverTimeMs);
   if (advanced.state.mealsAvailable === 0) {
     throw new GameError("NO_MEALS_AVAILABLE", "the hog has eaten all available meals");
@@ -247,7 +276,37 @@ export function applyGameAction(savedState: unknown, actionInput: unknown, serve
       text: definitionById.get(mutation)!.eventText,
     });
   }
-  return { state: resolved.state, events };
+  const ended = resolveEnding(resolved.state, serverTimeMs);
+  if (ended.event) events.push(ended.event);
+  return { state: ended.state, events };
+}
+
+function resolveEnding(
+  state: GameState,
+  serverTimeMs: number,
+): { state: GameState; event: Extract<GameEvent, { type: "life_ended" }> | null } {
+  if (
+    state.ending
+    || state.stats.slop < 100
+    || state.mealsEaten < ENDING_MIN_MEALS
+  ) return { state, event: null };
+  const definition = ENDING_CATALOG[0];
+  const ending: GameEnding = {
+    id: definition.id,
+    endedAtMs: serverTimeMs,
+    cause: definition.cause,
+    epitaph: definition.epitaph,
+  };
+  return {
+    state: { ...state, ending },
+    event: {
+      type: "life_ended",
+      ending: definition.id,
+      name: definition.name,
+      cause: definition.cause,
+      epitaph: definition.epitaph,
+    },
+  };
 }
 
 function applyCleanAction(advanced: GameResult, serverTimeMs: number): GameResult {
@@ -326,6 +385,7 @@ export function advanceGameTime(savedState: unknown, serverTimeMs: number): Game
   if (serverTimeMs < state.updatedAtMs) {
     throw new GameError("INVALID_TIME", "server time cannot move backward");
   }
+  if (state.ending) return { state, events: [] };
 
   const hungerTicks = Math.floor((serverTimeMs - state.hungerTickAtMs) / HUNGER_TICK_MS);
   const refillTicks = Math.floor((serverTimeMs - state.mealRefillAtMs) / MEAL_REFILL_MS);
@@ -371,7 +431,7 @@ export function parseGameState(input: unknown): GameState {
   const expected = [
     "rulesVersion", "rngState", "updatedAtMs", "hungerTickAtMs", "mealRefillAtMs",
     "mealsAvailable", "hunger", "stats", "taste", "mealsEaten", "recentMeals",
-    "discoveries", "equippedMutations", "lastCleanedAtMs",
+    "discoveries", "equippedMutations", "lastCleanedAtMs", "ending",
   ];
   if (!hasExactKeys(input, expected)) throw new GameError("INVALID_STATE", "saved state has missing or unknown fields");
 
@@ -391,7 +451,6 @@ export function parseGameState(input: unknown): GameState {
       throw new GameError("INVALID_STATE", "last cleaning cannot be in the future");
     }
   }
-
   if (!isRecord(input.stats) || !hasExactKeys(input.stats, ["slop", "mass", "brain", "filth", "joy"])) {
     throw new GameError("INVALID_STATE", "stats have missing or unknown fields");
   }
@@ -400,6 +459,30 @@ export function parseGameState(input: unknown): GameState {
   assertIntegerInRange(input.stats.brain, 0, 100, "brain");
   assertIntegerInRange(input.stats.filth, 0, 100, "filth");
   assertIntegerInRange(input.stats.joy, 0, 100, "joy");
+  if (input.ending !== null) {
+    if (
+      !isRecord(input.ending)
+      || !hasExactKeys(input.ending, ["id", "endedAtMs", "cause", "epitaph"])
+      || typeof input.ending.id !== "string"
+      || !ENDING_IDS.includes(input.ending.id as EndingId)
+      || typeof input.ending.cause !== "string"
+      || typeof input.ending.epitaph !== "string"
+    ) {
+      throw new GameError("INVALID_STATE", "ending is invalid");
+    }
+    assertTime(input.ending.endedAtMs);
+    const endingId = input.ending.id as EndingId;
+    const definition = ENDING_CATALOG.find(ending => ending.id === endingId)!;
+    if (
+      input.ending.endedAtMs !== input.updatedAtMs
+      || input.ending.cause !== definition.cause
+      || input.ending.epitaph !== definition.epitaph
+      || input.stats.slop !== 100
+      || input.mealsEaten < ENDING_MIN_MEALS
+    ) {
+      throw new GameError("INVALID_STATE", "ending is not canonical");
+    }
+  }
 
   if (!isRecord(input.taste) || !hasExactKeys(input.taste, [...FOOD_KINDS])) {
     throw new GameError("INVALID_STATE", "taste has missing or unknown food kinds");

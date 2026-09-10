@@ -103,9 +103,13 @@ export async function feedPostAction(
       sourceCid,
     );
     revalidatePath("/");
+    revalidatePath("/pen/[penId]", "page");
+    const ending = result.events.find(event => event.type === "life_ended");
     return {
       status: "fed",
-      message: "The post is now inside your hog. No refunds.",
+      message: ending?.type === "life_ended"
+        ? `${ending.name}. ${ending.epitaph}`
+        : "The post is now inside your hog. No refunds.",
       food: food as FoodKind,
       mealsAvailable: result.state.mealsAvailable,
       mealsEaten: result.state.mealsEaten,

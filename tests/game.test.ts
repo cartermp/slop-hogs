@@ -3,6 +3,7 @@ import { test } from "node:test";
 import {
   FOOD_KINDS,
   MUTATION_IDS,
+  ENDING_MIN_MEALS,
   GameError,
   advanceGameTime,
   applyGameAction,
@@ -99,6 +100,41 @@ test("cleaning is useful, paced, and does not consume a meal", () => {
   assert.throws(
     () => applyGameAction(createGameState(START, 12), { type: "clean" }, START),
     (error: unknown) => error instanceof GameError && error.code === "ALREADY_CLEAN",
+  );
+});
+
+test("sustained slop records one ending and freezes the terminal state", () => {
+  const nearlyFinished: GameState = {
+    ...createGameState(START, 91),
+    stats: { slop: 99, mass: 120, brain: 40, filth: 80, joy: 90 },
+    mealsEaten: ENDING_MIN_MEALS - 1,
+  };
+  const ended = applyGameAction(
+    nearlyFinished,
+    { type: "feed", food: "ai_image" },
+    START,
+  );
+  assert.deepEqual(ended.state.ending, {
+    id: "slop_overload",
+    endedAtMs: START,
+    cause: "One hundred percent slop",
+    epitaph: "It ate the feed. The feed ate back.",
+  });
+  assert.deepEqual(ended.events.filter(event => event.type === "life_ended"), [{
+    type: "life_ended",
+    ending: "slop_overload",
+    name: "Slop Overload",
+    cause: "One hundred percent slop",
+    epitaph: "It ate the feed. The feed ate back.",
+  }]);
+  assert.deepEqual(
+    advanceGameTime(ended.state, START + 30 * 24 * HOUR),
+    { state: ended.state, events: [] },
+    "elapsed reads cannot alter a terminal state",
+  );
+  assert.throws(
+    () => applyGameAction(ended.state, { type: "feed", food: "shitpost" }, START),
+    (error: unknown) => error instanceof GameError && error.code === "LIFE_ENDED",
   );
 });
 
