@@ -22,6 +22,7 @@
     "db:migrate": "node --env-file-if-exists=.env.local scripts/migrate.ts",
     "db:clean-test-data": "node --env-file-if-exists=.env.local scripts/clean-test-data.ts",
     "test:db": "node --env-file-if-exists=.env.local --test tests/database.integration.ts",
+    "test:owner": "node --env-file-if-exists=.env.local scripts/check-owner-page.ts",
     "db:check": "node --env-file-if-exists=.env.local scripts/check-database.ts",
     "backup:prepare": "node --env-file-if-exists=.env.local scripts/check-backup-restore.ts prepare",
     "backup:verify": "node --env-file-if-exists=.env.local scripts/check-backup-restore.ts verify",

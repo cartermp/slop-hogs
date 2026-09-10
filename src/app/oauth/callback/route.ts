@@ -1,7 +1,7 @@
 import { NextResponse } from "next/server";
 import { getDatabase } from "@/lib/server/database";
 import { loadCostPolicy } from "@/lib/server/cost-policy";
-import { AccountLimitError, completeOAuthSignIn, RegistrationClosedError } from "@/lib/server/hogs";
+import { AccountLimitError, completeOAuthSignIn, NotInvitedError, RegistrationClosedError } from "@/lib/server/hogs";
 import { loadOAuthConfig, parseInvitedDids } from "@/lib/server/oauth-config";
 import { getOAuthClient } from "@/lib/server/oauth";
 
@@ -50,7 +50,8 @@ export async function GET(request: Request) {
         console.error(`OAuth cleanup failed: ${message}`);
       }
     }
-    if (error instanceof RegistrationClosedError) return errorRedirect(config.origin, "not_invited");
+    if (error instanceof NotInvitedError) return errorRedirect(config.origin, "not_invited");
+    if (error instanceof RegistrationClosedError) return errorRedirect(config.origin, "registration_closed");
     if (error instanceof AccountLimitError) return errorRedirect(config.origin, "account_limit");
     const message = error instanceof Error ? error.message : "Unknown callback failure";
     console.error(`OAuth callback failed: ${message}`);

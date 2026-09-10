@@ -8,6 +8,7 @@ import {
   feedHog,
   getAppSession,
   issueSession,
+  NotInvitedError,
   provisionHog,
   RegistrationClosedError,
   revokeSession,
@@ -34,6 +35,7 @@ test("real PostgreSQL persistence, retries, isolation and rollback", async () =>
   const otherDid = `did:plc:test${randomUUID().replaceAll("-", "")}`;
   const oauthDid = `did:plc:test${randomUUID().replaceAll("-", "")}`;
   const closedDid = `did:plc:test${randomUUID().replaceAll("-", "")}`;
+  const uninvitedDid = `did:plc:test${randomUUID().replaceAll("-", "")}`;
   const action = { type: "feed", food: "ai_image" };
   try {
     await Promise.all([migrate(pool), migrate(pool)]);
@@ -79,6 +81,15 @@ test("real PostgreSQL persistence, retries, isolation and rollback", async () =>
       }),
       RegistrationClosedError,
     );
+    await assert.rejects(
+      completeOAuthSignIn(pool, uninvitedDid, {
+        registrationsEnabled: true,
+        accountLimit: 50,
+        invitedDids: new Set(),
+        operationalPolicy,
+      }),
+      NotInvitedError,
+    );
     const authenticated = await completeOAuthSignIn(pool, oauthDid, {
       registrationsEnabled: true,
       accountLimit: 50,
@@ -107,6 +118,9 @@ test("real PostgreSQL persistence, retries, isolation and rollback", async () =>
       }),
       ReadOnlyError,
     );
+    const readOnlyStatus = await pool.query(
+      "SELECT xmin::text AS xmin, measured_at FROM operational_status WHERE id=true",
+    );
     assert.deepEqual(
       await feedHog(pool, rotated.token, rotated.hogId, oauthRequest, action, {
         ...operationalPolicy,
@@ -114,6 +128,11 @@ test("real PostgreSQL persistence, retries, isolation and rollback", async () =>
       }),
       oauthResult,
       "read-only mode preserves idempotent receipts",
+    );
+    assert.deepEqual(
+      (await pool.query("SELECT xmin::text AS xmin, measured_at FROM operational_status WHERE id=true")).rows,
+      readOnlyStatus.rows,
+      "fresh unchanged read-only checks do not write operational status",
     );
     const storageBlockedDid = `did:plc:test${randomUUID().replaceAll("-", "")}`;
     await assert.rejects(
@@ -132,7 +151,7 @@ test("real PostgreSQL persistence, retries, isolation and rollback", async () =>
       "INSERT INTO oauth_sessions(did, encrypted_data) VALUES ($1,$2)",
       [oauthDid, Buffer.alloc(30)],
     );
-    const testDids = [did, otherDid, oauthDid, closedDid, storageBlockedDid];
+    const testDids = [did, otherDid, oauthDid, closedDid, uninvitedDid, storageBlockedDid];
     assert.deepEqual(await previewTestDataCleanup(pool, testDids), {
       accounts: 3,
       hogLives: 3,
@@ -178,6 +197,20 @@ test("real PostgreSQL persistence, retries, isolation and rollback", async () =>
       }
       const restored = createDatabase(restoredUrl.toString());
       try {
+        await restored.query("UPDATE backup_restore_checks SET challenge=$1 WHERE id=true", [randomUUID()]);
+        await assert.rejects(verifyRestoredBackup(pool, restored), /prepared backup challenge/);
+        await restored.query("UPDATE backup_restore_checks SET challenge=$1 WHERE id=true", [backupCheck.challenge]);
+        const restoredState = await restored.query("SELECT state FROM hog_lives WHERE id=$1", [backupCheck.fixture_hog_id]);
+        await restored.query("UPDATE hog_lives SET state=$2 WHERE id=$1", [
+          backupCheck.fixture_hog_id,
+          { ...restoredState.rows[0].state, mealsEaten: 999 },
+        ]);
+        await assert.rejects(verifyRestoredBackup(pool, restored), /fixture is missing or changed/);
+        await restored.query("UPDATE hog_lives SET state=$2 WHERE id=$1", [
+          backupCheck.fixture_hog_id,
+          restoredState.rows[0].state,
+        ]);
+
         const verified = await verifyRestoredBackup(pool, restored);
         assert.equal(verified.challenge, backupCheck.challenge);
         assert.ok(verified.sourceDatabaseSizeBytes > 0);
@@ -189,16 +222,11 @@ test("real PostgreSQL persistence, retries, isolation and rollback", async () =>
         assert.ok(recorded.rows[0].verified_at instanceof Date);
         assert.ok(Number(recorded.rows[0].source_database_size_bytes) > 0);
         assert.ok(Number(recorded.rows[0].restored_database_size_bytes) > 0);
-
-        await restored.query("UPDATE backup_restore_checks SET challenge=$1 WHERE id=true", [randomUUID()]);
-        await assert.rejects(verifyRestoredBackup(pool, restored), /prepared backup challenge/);
-        await restored.query("UPDATE backup_restore_checks SET challenge=$1 WHERE id=true", [backupCheck.challenge]);
-        const restoredState = await restored.query("SELECT state FROM hog_lives WHERE id=$1", [backupCheck.fixture_hog_id]);
-        await restored.query("UPDATE hog_lives SET state=$2 WHERE id=$1", [
-          backupCheck.fixture_hog_id,
-          { ...restoredState.rows[0].state, mealsEaten: 999 },
-        ]);
-        await assert.rejects(verifyRestoredBackup(pool, restored), /fixture is missing or changed/);
+        await assert.rejects(
+          verifyRestoredBackup(pool, restored),
+          /Run backup:prepare/,
+          "a successful backup challenge cannot be replayed",
+        );
       } finally {
         await restored.end();
       }
@@ -208,7 +236,7 @@ test("real PostgreSQL persistence, retries, isolation and rollback", async () =>
     }
   } finally {
     // Remove only this test's uniquely named accounts and dependent fixtures.
-    const testDids = [did, otherDid, oauthDid, closedDid];
+    const testDids = [did, otherDid, oauthDid, closedDid, uninvitedDid];
     await pool.query("DELETE FROM oauth_sessions WHERE did=ANY($1)", [testDids]);
     await pool.query("DELETE FROM hog_actions WHERE hog_id IN (SELECT id FROM hog_lives WHERE owner_did=ANY($1))", [testDids]);
     await pool.query("DELETE FROM app_sessions WHERE owner_did=ANY($1)", [testDids]);

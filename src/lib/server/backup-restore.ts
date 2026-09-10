@@ -15,7 +15,9 @@ interface BackupCheckRow {
 
 async function readCheck(pool: Pool): Promise<BackupCheckRow> {
   const result = await pool.query<BackupCheckRow>(
-    "SELECT challenge, fixture_hog_id, fixture_digest, prepared_at FROM backup_restore_checks WHERE id=true",
+    `SELECT challenge, fixture_hog_id, fixture_digest, prepared_at
+       FROM backup_restore_checks
+      WHERE id=true AND verified_at IS NULL`,
   );
   if (!result.rowCount) throw new Error("Run backup:prepare before creating the backup");
   return result.rows[0];
@@ -114,7 +116,7 @@ export async function verifyRestoredBackup(source: Pool, restored: Pool): Promis
   const updated = await source.query(
     `UPDATE backup_restore_checks
         SET verified_at=$2, source_database_size_bytes=$3, restored_database_size_bytes=$4
-      WHERE id=true AND challenge=$1`,
+      WHERE id=true AND challenge=$1 AND verified_at IS NULL`,
     [result.challenge, result.verifiedAt, result.sourceDatabaseSizeBytes, result.restoredDatabaseSizeBytes],
   );
   if (updated.rowCount !== 1) throw new Error("Backup challenge changed during verification");

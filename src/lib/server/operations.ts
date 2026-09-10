@@ -71,25 +71,62 @@ function mapStatus(row: OperationalStatusRow): StorageControls | null {
   };
 }
 
-export async function refreshOperationalStatus(
-  client: PoolClient,
-  policy: OperationalPolicy,
-  force = false,
-): Promise<StorageControls> {
-  await client.query("SELECT pg_advisory_xact_lock(734006)");
-  const current = await client.query<OperationalStatusRow>(
+function controlsMatch(left: StorageControls, right: StorageControls): boolean {
+  return left.databaseSizeBytes === right.databaseSizeBytes
+    && left.usedPercent === right.usedPercent
+    && left.warning === right.warning
+    && left.registrationsBlocked === right.registrationsBlocked
+    && left.cardsBlocked === right.cardsBlocked
+    && left.readOnly === right.readOnly
+    && left.measuredAt.getTime() === right.measuredAt.getTime();
+}
+
+async function readOperationalStatus(client: PoolClient, lock: boolean): Promise<OperationalStatusRow | null> {
+  const result = await client.query<OperationalStatusRow>(
     `SELECT database_size_bytes, database_used_percent, warning, registrations_blocked,
             cards_blocked, read_only, measured_at,
             measured_at > clock_timestamp() - ($1 * interval '1 minute') AS fresh
        FROM operational_status
       WHERE id=true
-      FOR UPDATE`,
+      ${lock ? "FOR UPDATE" : ""}`,
     [measurementIntervalMinutes],
   );
-  const previous = current.rowCount ? mapStatus(current.rows[0]) : null;
+  return result.rows[0] ?? null;
+}
+
+export async function refreshOperationalStatus(
+  client: PoolClient,
+  policy: OperationalPolicy,
+  force = false,
+): Promise<StorageControls> {
+  let row = await readOperationalStatus(client, false);
+  let previous = row ? mapStatus(row) : null;
+  if (!force && row?.fresh && previous) {
+    const controls = deriveStorageControls(
+      previous.databaseSizeBytes,
+      policy.database,
+      policy.readOnlyMode,
+      previous.measuredAt,
+    );
+    if (controlsMatch(controls, previous)) return controls;
+  }
+
+  await client.query("SELECT pg_advisory_xact_lock(734006)");
+  row = await readOperationalStatus(client, true);
+  previous = row ? mapStatus(row) : null;
+  if (!force && row?.fresh && previous) {
+    const controls = deriveStorageControls(
+      previous.databaseSizeBytes,
+      policy.database,
+      policy.readOnlyMode,
+      previous.measuredAt,
+    );
+    if (controlsMatch(controls, previous)) return controls;
+  }
+
   let databaseSizeBytes = previous?.databaseSizeBytes;
   let measuredAt = previous?.measuredAt;
-  if (force || !current.rows[0]?.fresh || databaseSizeBytes === undefined || !measuredAt) {
+  if (force || !row?.fresh || databaseSizeBytes === undefined || !measuredAt) {
     const measured = await client.query<{ size: string; measured_at: Date }>(
       "SELECT pg_database_size(current_database())::text AS size, clock_timestamp() AS measured_at",
     );
@@ -121,6 +158,14 @@ export async function refreshOperationalStatus(
     ],
   );
   return controls;
+}
+
+export function refreshOperationalStatusForPool(
+  pool: Pool,
+  policy: OperationalPolicy,
+  force = false,
+): Promise<StorageControls> {
+  return transaction(pool, client => refreshOperationalStatus(client, policy, force));
 }
 
 export interface OwnerOperations {
