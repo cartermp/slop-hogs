@@ -1,9 +1,11 @@
 "use server";
 
 import { randomUUID } from "node:crypto";
-import { cookies, headers } from "next/headers";
-import { FOOD_KINDS, GameError, type FoodKind } from "@/lib/game";
+import { revalidatePath } from "next/cache";
+import { FOOD_KINDS, type FoodKind } from "@/lib/food";
+import { GameError } from "@/lib/game";
 import type { FeedFormState, PreviewFormState } from "@/lib/post-form";
+import { requireSameOriginToken } from "@/lib/server/action-auth";
 import { loadCostPolicy } from "@/lib/server/cost-policy";
 import { getDatabase } from "@/lib/server/database";
 import {
@@ -12,7 +14,6 @@ import {
   getAppSession,
   PostPreviewExpiredError,
 } from "@/lib/server/hogs";
-import { parseAppOrigin } from "@/lib/server/oauth-config";
 import {
   InvalidPostUrlError,
   PostLookupError,
@@ -21,16 +22,6 @@ import {
   PreviewDisabledError,
   previewPost,
 } from "@/lib/server/posts";
-
-const cookieName = "slop_hogs_session";
-
-async function requireSameOriginToken(): Promise<string> {
-  const requestOrigin = (await headers()).get("origin");
-  if (requestOrigin !== parseAppOrigin(process.env.APP_ORIGIN)) throw new Error("Forbidden");
-  const token = (await cookies()).get(cookieName)?.value;
-  if (!token) throw new Error("Unauthorized");
-  return token;
-}
 
 function errorState(error: unknown): { status: "error"; message: string } {
   if (error instanceof InvalidPostUrlError) return { status: "error", message: error.message };
@@ -111,6 +102,7 @@ export async function feedPostAction(
       sourceUri,
       sourceCid,
     );
+    revalidatePath("/");
     return {
       status: "fed",
       message: "The post is now inside your hog. No refunds.",

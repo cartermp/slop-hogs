@@ -2,7 +2,7 @@
 
 A Bluesky-linked virtual pet with a terrible diet. Built by one developer and Codex in small asynchronous tasks.
 
-SH-007 adds authenticated public-post previews and feeding. Supported Bluesky post URLs resolve to canonical AT URIs, lookup work is quota-bound, and one hog cannot eat the same canonical post twice.
+SH-008 adds eight collectable mutations, mutation-composed live art, built-in meals, and cooldown-protected cleaning. Supported Bluesky post URLs still resolve to canonical AT URIs, lookup work is quota-bound, and one hog cannot eat the same canonical post twice.
 
 ## Run locally
 
@@ -18,7 +18,7 @@ If you use nvm and need to install the pinned default, run `nvm install` and `nv
 
 Open http://localhost:3000. The shell and local gallery do not require a provider account. Public-post feeding requires the PostgreSQL and OAuth configuration below.
 
-In development, open http://localhost:3000/gallery to compare six-meal AI image, generated post, chatbot screenshot, human post, and shitpost builds. The gallery returns a normal not-found page in production.
+In development, open http://localhost:3000/gallery to compare the mutation-composed six-meal AI image, generated post, chatbot screenshot, human post, and shitpost builds. The gallery returns a normal not-found page in production.
 
 The shell and gallery still run without auth configuration. To exercise OAuth, configure PostgreSQL as described in [database development](docs/database.md), run migrations, and set `APP_ORIGIN`, `OAUTH_PRIVATE_KEY`, `OAUTH_ENCRYPTION_KEY`, `BLUESKY_INVITED_DIDS`, and `SLOP_HOGS_OWNER_DIDS`. Generate the two secrets with:
 
@@ -57,4 +57,4 @@ The owner-only `/owner` page shows application feature flags, implemented quota 
 - [Architecture decisions](docs/decisions.md)
 - [Cost controls and deployment gate](docs/cost-controls.md)
 
-Railway is the intended host. Repository support through SH-007 is complete, but no hosted resource or dashboard setting can be verified from source control and CI does not deploy. Complete the live checklist in the runbook before inviting players. The next product task is SH-008.
+Railway is the intended host. Repository support through SH-008 is complete, but no hosted resource or dashboard setting can be verified from source control and CI does not deploy. Complete the live checklist in the runbook before inviting players. The next product task is SH-009.

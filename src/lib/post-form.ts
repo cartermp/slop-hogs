@@ -1,4 +1,4 @@
-import type { FoodKind } from "./game.ts";
+import type { FoodKind } from "./food.ts";
 
 export interface PreviewSummary {
   canonicalUri: string;

@@ -1,14 +1,17 @@
 import assert from "node:assert/strict";
 import { randomUUID } from "node:crypto";
 import { test } from "node:test";
+import { createGameState, parseGameState } from "../src/lib/game.ts";
 import { createDatabase, transaction } from "../src/lib/server/database.ts";
 import { migrate } from "../src/lib/server/migrations.ts";
 import {
   completeOAuthSignIn,
+  cleanHog,
   DuplicatePostError,
   feedHog,
   feedHogFromPost,
   getAppSession,
+  getHogView,
   issueSession,
   NotInvitedError,
   provisionHog,
@@ -44,6 +47,7 @@ test("real PostgreSQL persistence, retries, isolation and rollback", async () =>
   const closedDid = `did:plc:test${randomUUID().replaceAll("-", "")}`;
   const uninvitedDid = `did:plc:test${randomUUID().replaceAll("-", "")}`;
   const postDid = `did:plc:test${randomUUID().replaceAll("-", "")}`;
+  const legacyDid = `did:plc:test${randomUUID().replaceAll("-", "")}`;
   const postRecordKey = randomUUID().replaceAll("-", "");
   const canonicalPostUri = `at://${postDid}/app.bsky.feed.post/${postRecordKey}`;
   const postUrl = `https://bsky.app/profile/poster.example/post/${postRecordKey}`;
@@ -60,6 +64,30 @@ test("real PostgreSQL persistence, retries, isolation and rollback", async () =>
   const action = { type: "feed", food: "ai_image" };
   try {
     await Promise.all([migrate(pool), migrate(pool)]);
+    const legacyHog = randomUUID();
+    const {
+      recentMeals: _recentMeals,
+      discoveries: _discoveries,
+      equippedMutations: _equippedMutations,
+      lastCleanedAtMs: _lastCleanedAtMs,
+      ...legacyState
+    } = createGameState(Date.now(), 77);
+    await pool.query("INSERT INTO accounts(did) VALUES ($1)", [legacyDid]);
+    await pool.query(
+      "INSERT INTO hog_lives(id, owner_did, state, ended_at) VALUES ($1,$2,$3,clock_timestamp())",
+      [legacyHog, legacyDid, { ...legacyState, rulesVersion: 1 }],
+    );
+    await pool.query("DELETE FROM schema_migrations WHERE name='005_mutations_and_care.sql'");
+    await migrate(pool);
+    const upgradedLegacy = parseGameState(
+      (await pool.query("SELECT state FROM hog_lives WHERE id=$1", [legacyHog])).rows[0].state,
+    );
+    assert.equal(upgradedLegacy.rulesVersion, 2);
+    assert.deepEqual(upgradedLegacy.recentMeals, []);
+    assert.deepEqual(upgradedLegacy.discoveries, []);
+    assert.deepEqual(upgradedLegacy.equippedMutations, []);
+    assert.equal(upgradedLegacy.lastCleanedAtMs, null);
+
     const ids = await Promise.all(Array.from({length: 8}, () => provisionHog(pool, did)));
     assert.equal(new Set(ids).size, 1, "concurrent provisioning creates one active life");
     const hog = ids[0];
@@ -132,6 +160,33 @@ test("real PostgreSQL persistence, retries, isolation and rollback", async () =>
     assert.equal((await getAppSession(pool, rotated.token))?.ownerDid, oauthDid);
     const oauthRequest = randomUUID();
     const oauthResult = await feedHog(pool, rotated.token, rotated.hogId, oauthRequest, action);
+    const mutationResult = await feedHog(pool, rotated.token, rotated.hogId, randomUUID(), action);
+    assert.ok(mutationResult.state.discoveries.includes("glazed_eyes"));
+    const beforeView = await pool.query(
+      "SELECT xmin::text AS xmin, state FROM hog_lives WHERE id=$1",
+      [rotated.hogId],
+    );
+    const viewed = await getHogView(pool, rotated.token);
+    assert.ok(viewed);
+    assert.equal(viewed.hogId, rotated.hogId);
+    assert.ok(viewed.state.updatedAtMs >= beforeView.rows[0].state.updatedAtMs);
+    assert.equal(
+      (await pool.query("SELECT xmin::text AS xmin FROM hog_lives WHERE id=$1", [rotated.hogId])).rows[0].xmin,
+      beforeView.rows[0].xmin,
+      "opening a hog advances the displayed clock without writing or rolling discoveries",
+    );
+    const cleanRequest = randomUUID();
+    const cleaned = await cleanHog(pool, rotated.token, rotated.hogId, cleanRequest);
+    assert.ok(cleaned.events.some(event => event.type === "cleaned"));
+    assert.deepEqual(
+      await cleanHog(pool, rotated.token, rotated.hogId, cleanRequest),
+      cleaned,
+      "cleaning retries return the original receipt",
+    );
+    await assert.rejects(
+      feedHog(pool, rotated.token, rotated.hogId, cleanRequest, action),
+      /different action/,
+    );
     await assert.rejects(
       feedHog(pool, rotated.token, rotated.hogId, randomUUID(), action, {
         ...operationalPolicy,
@@ -423,20 +478,20 @@ test("real PostgreSQL persistence, retries, isolation and rollback", async () =>
       "INSERT INTO oauth_sessions(did, encrypted_data) VALUES ($1,$2)",
       [oauthDid, Buffer.alloc(30)],
     );
-    const testDids = [did, otherDid, oauthDid, closedDid, uninvitedDid, storageBlockedDid, postDid];
+    const testDids = [did, otherDid, oauthDid, closedDid, uninvitedDid, storageBlockedDid, postDid, legacyDid];
     assert.deepEqual(await previewTestDataCleanup(pool, testDids), {
-      accounts: 4,
-      hogLives: 4,
+      accounts: 5,
+      hogLives: 5,
       appSessions: 4,
       oauthSessions: 1,
-      hogActions: 8,
+      hogActions: 10,
     });
     assert.deepEqual(await deleteTestData(pool, testDids), {
-      accounts: 4,
-      hogLives: 4,
+      accounts: 5,
+      hogLives: 5,
       appSessions: 4,
       oauthSessions: 1,
-      hogActions: 8,
+      hogActions: 10,
     });
     assert.deepEqual(await previewTestDataCleanup(pool, testDids), {
       accounts: 0,
@@ -508,7 +563,7 @@ test("real PostgreSQL persistence, retries, isolation and rollback", async () =>
     }
   } finally {
     // Remove only this test's uniquely named accounts and dependent fixtures.
-    const testDids = [did, otherDid, oauthDid, closedDid, uninvitedDid, postDid];
+    const testDids = [did, otherDid, oauthDid, closedDid, uninvitedDid, postDid, legacyDid];
     await pool.query("DELETE FROM oauth_sessions WHERE did=ANY($1)", [testDids]);
     await pool.query("DELETE FROM hog_actions WHERE hog_id IN (SELECT id FROM hog_lives WHERE owner_did=ANY($1))", [testDids]);
     await pool.query("DELETE FROM app_sessions WHERE owner_did=ANY($1)", [testDids]);

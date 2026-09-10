@@ -68,6 +68,32 @@ h1 { font-size: clamp(2.8rem, 8vw, 5.6rem); line-height: .98; letter-spacing: -.
 .auth-notice { max-width: 38rem; margin: 1.25rem 0 0; color: #baf0ca; }
 .auth-error { color: #ffb1bc; }
 .pen code { overflow-wrap: anywhere; color: #ffc0d8; }
+.pen-stats { display: grid; grid-template-columns: repeat(2, minmax(0, 1fr)); gap: .35rem .8rem; margin: 1rem 0 0; }
+.pen-stats div { display: flex; justify-content: space-between; gap: .5rem; border-top: 1px solid #513543; padding-top: .35rem; }
+.pen-stats dt { color: #bba9b5; }
+.pen-stats dd { margin: 0; font-weight: 800; }
+
+.hog-controls, .mutation-collection { margin-top: 3rem; border-top: 1px solid #513543; padding-top: 2rem; }
+.hog-controls h2, .mutation-collection h2 { margin: .4rem 0 1.25rem; font-size: clamp(1.7rem, 4vw, 2.5rem); }
+.care-grid, .mutation-grid { display: grid; grid-template-columns: repeat(2, minmax(0, 1fr)); gap: 1rem; }
+.care-card, .mutation-card { border: 1px solid #513543; border-radius: 1rem; padding: 1.25rem; background: #211920; }
+.care-card h3, .mutation-card h3 { margin: 0 0 .55rem; color: #ffc0d8; }
+.care-card > p, .mutation-card > p:last-child { color: #bba9b5; line-height: 1.5; }
+.care-card label { display: block; margin: 1rem 0 .5rem; color: #ffc0d8; font-size: .85rem; font-weight: 750; }
+.care-card select {
+  width: 100%;
+  border: 1px solid #694356;
+  border-radius: .7rem;
+  margin-bottom: .7rem;
+  padding: .8rem .9rem;
+  background: #171117;
+  color: #fff4f8;
+  font: inherit;
+}
+.mutation-grid { grid-template-columns: repeat(4, minmax(0, 1fr)); }
+.mutation-card .specimen { color: #baf0ca; }
+.mutation-locked { border-style: dashed; opacity: .66; }
+.mutation-locked .specimen { color: #bba9b5; }
 
 .post-feeder { margin-top: 3rem; border-top: 1px solid #513543; padding-top: 2rem; }
 .post-feeder h2 { margin: .4rem 0 1.25rem; font-size: clamp(1.7rem, 4vw, 2.5rem); }
@@ -194,6 +220,7 @@ h1 { font-size: clamp(2.8rem, 8vw, 5.6rem); line-height: .98; letter-spacing: -.
   .preview-form > div, .feed-form > div { align-items: stretch; flex-direction: column; }
   .operations-grid { grid-template-columns: 1fr; }
   .operations-links { align-items: flex-start; flex-direction: column; }
+  .care-grid, .mutation-grid { grid-template-columns: 1fr; }
 }
 
 @media (prefers-reduced-motion: reduce) {
