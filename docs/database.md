@@ -17,6 +17,15 @@ TEST_DATABASE_URL=postgres://slophog:test-only@localhost:5432/slophog_test
 
 Run `npm run db:migrate`, then `npm run test:db`. Tests require the separate test URL and fail if absent. They create uniquely named fixtures and delete only those fixtures. Do not point them at production. Stop the test container with `docker stop slophog-test` when finished. Its data remains in the stopped container.
 
+To remove accounts created while manually testing an app deployment, pass their exact DIDs to the cleanup command. It previews the affected rows by default:
+
+```sh
+npm run db:clean-test-data -- did:plc:TEST_ACCOUNT
+npm run db:clean-test-data -- --execute did:plc:TEST_ACCOUNT
+```
+
+Pass additional DIDs as separate arguments when needed. The command deletes only those accounts and their hog lives, sessions, and action receipts in one transaction. It refuses unknown options, malformed DIDs, and the retained `did:plc:deploymentcheck...` persistence fixture. Run the preview first and verify its counts before adding `--execute`.
+
 The integration test uses actual row locks and concurrent requests. Eight provisioning requests must create one active hog. Eight identical feeds must consume one meal and return identical saved events. Twelve further feeds must accept exactly five. A forced transaction failure must preserve saved state. A new connection pool must read identical state and return the original retry receipt. Expired, revoked, and other-owner sessions must fail.
 
 This reconnect check is not a PostgreSQL crash/restore test. Railway restart and backup restore checks belong to SH-006.

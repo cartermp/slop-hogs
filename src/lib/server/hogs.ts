@@ -2,6 +2,7 @@ import { createHash, randomBytes, randomUUID } from "node:crypto";
 import type { Pool } from "pg";
 import { applyGameAction, createGameState, parseGameAction, parseGameState, type GameResult } from "../game.ts";
 import { transaction } from "./database.ts";
+import { isValidDid } from "./dids.ts";
 
 const hash = (token: string) => createHash("sha256").update(token).digest("hex");
 const uuid = /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i;
@@ -9,7 +10,7 @@ const uuid = /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i;
 // Trusted server entry point only. SH-005 must supply a DID verified by OAuth.
 // No HTTP endpoint exposes provisioning or accepts a DID as authentication.
 export async function provisionHog(pool: Pool, verifiedDid: string): Promise<string> {
-  if (!/^did:[a-z]+:[A-Za-z0-9._:%-]+$/.test(verifiedDid) || verifiedDid.length > 2048) throw new Error("Invalid DID");
+  if (!isValidDid(verifiedDid)) throw new Error("Invalid DID");
   return transaction(pool, async client => {
     await client.query("INSERT INTO accounts(did) VALUES ($1) ON CONFLICT DO NOTHING", [verifiedDid]);
     await client.query("SELECT did FROM accounts WHERE did=$1 FOR UPDATE", [verifiedDid]);

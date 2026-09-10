@@ -51,6 +51,15 @@ node scripts/check-persistence.ts seed
 
 This creates one synthetic operator hog, feeds it once, revokes its session, and prints a verification command containing its ID and state digest. Retain that command. Restart the app through Railway, then run the printed command inside the new app instance. Restart PostgreSQL during this empty-player phase, wait for it to recover, and run the same command again. Both checks must report an identical digest. Keep this one fixture for future restore tests; do not keep running seed. It consumes one account row and contains no user data. Do not run test:db against production.
 
+After manually testing the live app, use the app service's SSH session to preview cleanup for each test account DID, then repeat with `--execute` only after checking the counts:
+
+```sh
+npm run db:clean-test-data -- did:plc:TEST_ACCOUNT
+npm run db:clean-test-data -- --execute did:plc:TEST_ACCOUNT
+```
+
+The command targets only the listed DIDs and refuses to remove the retained `did:plc:deploymentcheck...` fixture.
+
 Record the project/service identifiers, deployed commit, URL, actual resource settings, confirmed spending limits, and restart results in your operating notes. Do not record secrets. This PR cannot mark those checks complete on your behalf.
 
 ## Failed deployment and recovery
