@@ -3,7 +3,7 @@ import {
   type FoodKind,
   type GameState,
   type MutationId,
-} from "@/lib/game";
+} from "../../lib/game.ts";
 
 export const ART_VERSION = 1 as const;
 

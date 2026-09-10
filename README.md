@@ -2,7 +2,7 @@
 
 A Bluesky-linked virtual pet with a terrible diet. Built by one developer and Codex in small asynchronous tasks.
 
-SH-009 adds stable public pen links, bounded visitor treats, owner-controlled visibility and gift intake, and account blocks. A visitor can only queue a treat; it changes the hog only when the owner accepts it as a normal meal.
+SH-010 adds authored speech drafts for mutation discoveries and owner-triggered, capped share cards. Public event and image reads only return already-stored data; they never render a card or fetch an external asset.
 
 ## Run locally
 
@@ -44,7 +44,7 @@ npm run simulate
 
 ## Cost boundary
 
-`config/cost-policy.json` holds the approved initial limits. Startup refuses missing, malformed, or unsafe settings. Invite-only registration and external previews are enabled. New public lookups are limited to 12 per account per UTC day and 100 globally per hour; cached previews do not spend lookup quota. Visitor treats are limited to three sent per account per UTC day, ten received per pen per day, one sender-to-pen gift per day, and 20 pending gifts per active hog. The app records database size at startup and at most every 15 minutes during writes. It warns at 70% of the 1 GB internal budget, blocks registrations and cards at 85%, and rejects new game state changes at 95%. `features.readOnlyMode` is the manual emergency stop.
+`config/cost-policy.json` holds the approved initial limits. Startup refuses missing, malformed, or unsafe settings. Invite-only registration and external previews are enabled. New public lookups are limited to 12 per account per UTC day and 100 globally per hour; cached previews do not spend lookup quota. Visitor treats are limited to three sent per account per UTC day, ten received per pen per day, one sender-to-pen gift per day, and 20 pending gifts per active hog. Authenticated owners can render at most two new cards per UTC day and the app can render 50 globally; failed render attempts count, one render runs per app instance, PNGs stop at 250 KB each, and stored cards stop at 250 MB total. The app records database size at startup and at most every 15 minutes during writes. It warns at 70% of the 1 GB internal budget, blocks registrations and cards at 85%, and rejects new game state changes at 95%. `features.readOnlyMode` is the manual emergency stop.
 
 The Railway dollar values are **configuration targets, not a billing cap applied by this code**. Configure the workspace dashboard before deployment. Request quotas must be implemented atomically with each future feature before enabling it. See [cost controls](docs/cost-controls.md).
 
@@ -57,4 +57,4 @@ The owner-only `/owner` page shows application feature flags, implemented quota 
 - [Architecture decisions](docs/decisions.md)
 - [Cost controls and deployment gate](docs/cost-controls.md)
 
-Railway is the intended host. Repository support through SH-009 is complete, but no hosted resource or dashboard setting can be verified from source control and CI does not deploy. Complete the live checklist in the runbook before inviting players. The next product task is SH-010.
+Railway is the intended host. Repository support through SH-010 is complete, but no hosted resource or dashboard setting can be verified from source control and CI does not deploy. Complete the live checklist in the runbook before inviting players. The next product task is SH-011.

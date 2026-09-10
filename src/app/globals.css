@@ -73,8 +73,8 @@ h1 { font-size: clamp(2.8rem, 8vw, 5.6rem); line-height: .98; letter-spacing: -.
 .pen-stats dt { color: #bba9b5; }
 .pen-stats dd { margin: 0; font-weight: 800; }
 
-.hog-controls, .mutation-collection, .pen-controls { margin-top: 3rem; border-top: 1px solid #513543; padding-top: 2rem; }
-.hog-controls h2, .mutation-collection h2, .pen-controls h2 { margin: .4rem 0 1.25rem; font-size: clamp(1.7rem, 4vw, 2.5rem); }
+.hog-controls, .mutation-collection, .pen-controls, .share-controls { margin-top: 3rem; border-top: 1px solid #513543; padding-top: 2rem; }
+.hog-controls h2, .mutation-collection h2, .pen-controls h2, .share-controls h2 { margin: .4rem 0 1.25rem; font-size: clamp(1.7rem, 4vw, 2.5rem); }
 .care-grid, .mutation-grid { display: grid; grid-template-columns: repeat(2, minmax(0, 1fr)); gap: 1rem; }
 .care-card, .mutation-card { border: 1px solid #513543; border-radius: 1rem; padding: 1.25rem; background: #211920; }
 .care-card h3, .mutation-card h3 { margin: 0 0 .55rem; color: #ffc0d8; }
@@ -165,6 +165,39 @@ h1 { font-size: clamp(2.8rem, 8vw, 5.6rem); line-height: .98; letter-spacing: -.
 .block-form { max-width: 44rem; margin-bottom: 1rem; }
 .blocked-account { display: grid; grid-template-columns: minmax(0, 1fr) auto; align-items: center; gap: .75rem; max-width: 44rem; margin-top: .65rem; }
 .blocked-account .action-message { grid-column: 1 / -1; }
+
+.share-grid { display: grid; grid-template-columns: repeat(2, minmax(0, 1fr)); gap: 1rem; }
+.share-event { border: 1px solid #513543; border-radius: 1rem; padding: 1.25rem; background: #211920; }
+.share-event h3 { margin: .35rem 0; color: #ffc0d8; }
+.share-event > p:not(.specimen) { min-height: 3em; color: #bba9b5; line-height: 1.5; }
+.share-event label { display: block; margin: 1rem 0 .5rem; color: #ffc0d8; font-size: .85rem; font-weight: 750; }
+.share-event textarea {
+  width: 100%;
+  resize: vertical;
+  border: 1px solid #694356;
+  border-radius: .7rem;
+  padding: .8rem .9rem;
+  background: #171117;
+  color: #fff4f8;
+  font: inherit;
+  line-height: 1.5;
+}
+.share-actions { display: flex; flex-wrap: wrap; gap: .5rem; margin-top: .65rem; }
+.share-actions button {
+  border: 1px solid #8a5870;
+  border-radius: .6rem;
+  padding: .6rem .8rem;
+  background: #2c2028;
+  color: #ffc0d8;
+  font: inherit;
+  font-weight: 750;
+  cursor: pointer;
+}
+.share-actions button:disabled { cursor: wait; opacity: .65; }
+.share-card-actions { margin-top: 1rem; border-top: 1px solid #3c2d36; padding-top: 1rem; }
+.share-card-actions a { color: #ff9ec3; font-weight: 700; text-underline-offset: .2rem; }
+.share-speech { max-width: 46rem; margin: 2rem 0; border-left: 4px solid #ff8fba; padding-left: 1.25rem; color: #ffc0d8; font-size: clamp(1.3rem, 3vw, 2rem); line-height: 1.45; }
+.stored-share-card { display: block; width: 100%; height: auto; margin: 2rem 0; border: 1px solid #694356; border-radius: 1rem; }
 
 .owner-page h1 { margin-bottom: 1rem; }
 .operations-warning {
@@ -266,7 +299,7 @@ h1 { font-size: clamp(2.8rem, 8vw, 5.6rem); line-height: .98; letter-spacing: -.
   .gift-form > div, .block-form > div { align-items: stretch; flex-direction: column; }
   .operations-grid { grid-template-columns: 1fr; }
   .operations-links { align-items: flex-start; flex-direction: column; }
-  .care-grid, .mutation-grid, .pen-settings, .gift-grid { grid-template-columns: 1fr; }
+  .care-grid, .mutation-grid, .pen-settings, .gift-grid, .share-grid { grid-template-columns: 1fr; }
 }
 
 @media (prefers-reduced-motion: reduce) {

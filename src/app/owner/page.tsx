@@ -72,6 +72,7 @@ export default async function OwnerPage() {
             <div><dt>Visitor treats today</dt><dd>{operations.giftsToday}</dd></div>
             <div><dt>Pending visitor treats</dt><dd>{operations.pendingGifts}</dd></div>
             <div><dt>Gift limits</dt><dd>{policy.limits.giftsPerSenderPerDay} sent / {policy.limits.giftsPerRecipientPerDay} received daily</dd></div>
+            <div><dt>Cards today</dt><dd>{operations.cardsToday} / {policy.limits.cardsGlobalPerDay}</dd></div>
             <div><dt>Stored cards</dt><dd>{formatBytes(operations.cardStorageBytes)} / {formatBytes(policy.limits.cardStorageMaxBytes)}</dd></div>
           </dl>
         </article>

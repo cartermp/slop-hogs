@@ -175,6 +175,7 @@ export interface OwnerOperations {
   postLookupsThisHour: number;
   giftsToday: number;
   pendingGifts: number;
+  cardsToday: number;
   cardStorageBytes: number;
   backupPreparedAt: Date | null;
   backupVerifiedAt: Date | null;
@@ -196,6 +197,8 @@ export async function getOwnerOperations(
       prepared_at: Date | null;
       verified_at: Date | null;
       restored_size: string | null;
+      cards_today: number;
+      card_storage_bytes: string;
     }>(`
       SELECT
         (SELECT count(*)::integer FROM accounts) AS account_count,
@@ -214,7 +217,12 @@ export async function getOwnerOperations(
         (SELECT count(*)::integer FROM gift_treats WHERE status='pending') AS pending_gifts,
         (SELECT prepared_at FROM backup_restore_checks WHERE id=true) AS prepared_at,
         (SELECT verified_at FROM backup_restore_checks WHERE id=true) AS verified_at,
-        (SELECT restored_database_size_bytes::text FROM backup_restore_checks WHERE id=true) AS restored_size
+        (SELECT restored_database_size_bytes::text FROM backup_restore_checks WHERE id=true) AS restored_size,
+        COALESCE((
+          SELECT cards FROM card_global_daily
+           WHERE bucket_start=(clock_timestamp() AT TIME ZONE 'UTC')::date
+        ), 0)::integer AS cards_today,
+        COALESCE((SELECT sum(byte_length) FROM share_cards), 0)::text AS card_storage_bytes
     `);
     const row = metrics.rows[0];
     return {
@@ -224,7 +232,8 @@ export async function getOwnerOperations(
       postLookupsThisHour: row.post_lookups,
       giftsToday: row.gifts_today,
       pendingGifts: row.pending_gifts,
-      cardStorageBytes: 0,
+      cardsToday: row.cards_today,
+      cardStorageBytes: Number(row.card_storage_bytes),
       backupPreparedAt: row.prepared_at,
       backupVerifiedAt: row.verified_at,
       restoredDatabaseSizeBytes: row.restored_size === null ? null : Number(row.restored_size),
