@@ -4,6 +4,7 @@ import { test } from "node:test";
 import { createDatabase, transaction } from "../src/lib/server/database.ts";
 import { migrate } from "../src/lib/server/migrations.ts";
 import { provisionHog, issueSession, revokeSession, feedHog } from "../src/lib/server/hogs.ts";
+import { deleteTestData, previewTestDataCleanup } from "../src/lib/server/test-data-cleanup.ts";
 
 test("real PostgreSQL persistence, retries, isolation and rollback", async () => {
   // Explicit separate URL. Never silently use an application database for tests.
@@ -47,6 +48,24 @@ test("real PostgreSQL persistence, retries, isolation and rollback", async () =>
     const newToken = await issueSession(pool, did);
     await revokeSession(pool, newToken);
     await assert.rejects(feedHog(pool, newToken, hog, request, action), /Unauthorized/);
+    assert.deepEqual(await previewTestDataCleanup(pool, [did, otherDid]), {
+      accounts: 2,
+      hogLives: 2,
+      appSessions: 2,
+      hogActions: 6,
+    });
+    assert.deepEqual(await deleteTestData(pool, [did, otherDid]), {
+      accounts: 2,
+      hogLives: 2,
+      appSessions: 2,
+      hogActions: 6,
+    });
+    assert.deepEqual(await previewTestDataCleanup(pool, [did, otherDid]), {
+      accounts: 0,
+      hogLives: 0,
+      appSessions: 0,
+      hogActions: 0,
+    });
   } finally {
     // Remove only this test's uniquely named accounts and dependent fixtures.
     await pool.query("DELETE FROM hog_actions WHERE hog_id IN (SELECT id FROM hog_lives WHERE owner_did=ANY($1))", [[did, otherDid]]);
