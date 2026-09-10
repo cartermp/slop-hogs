@@ -114,6 +114,10 @@ test("share events persist drafts and owner renders stay bounded while public re
   } finally {
     await pool.query("DELETE FROM card_global_daily");
     await pool.query("DELETE FROM app_sessions WHERE owner_did=ANY($1::text[])", [[ownerDid, otherDid]]);
+    await pool.query(
+      "DELETE FROM hog_actions WHERE hog_id IN (SELECT id FROM hog_lives WHERE owner_did=ANY($1::text[]))",
+      [[ownerDid, otherDid]],
+    );
     await pool.query("DELETE FROM hog_lives WHERE owner_did=ANY($1::text[])", [[ownerDid, otherDid]]);
     await pool.query("DELETE FROM accounts WHERE did=ANY($1::text[])", [[ownerDid, otherDid]]);
     await pool.end();
