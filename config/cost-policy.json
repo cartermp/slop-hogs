@@ -26,7 +26,7 @@
   "features": {
     "registrations": true,
     "readOnlyMode": false,
-    "externalPreviews": false,
+    "externalPreviews": true,
     "cardRendering": false,
     "activityImports": false,
     "paidAi": false

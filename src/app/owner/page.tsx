@@ -68,6 +68,7 @@ export default async function OwnerPage() {
           <dl>
             <div><dt>Accounts</dt><dd>{operations.accountCount} / {policy.limits.accounts}</dd></div>
             <div><dt>Logins this hour</dt><dd>{operations.loginAttemptsThisHour} / {policy.limits.loginAttemptsGlobalPerHour}</dd></div>
+            <div><dt>Post lookups this hour</dt><dd>{operations.postLookupsThisHour} / {policy.limits.postLookupsGlobalPerHour}</dd></div>
             <div><dt>Stored cards</dt><dd>{formatBytes(operations.cardStorageBytes)} / {formatBytes(policy.limits.cardStorageMaxBytes)}</dd></div>
           </dl>
         </article>

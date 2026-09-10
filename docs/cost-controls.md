@@ -4,7 +4,7 @@
 
 `config/cost-policy.json` is validated before dev, build, and start. Next.js instrumentation also validates it during Node startup, including when the Next CLI is run directly. The validator rejects unknown or omitted keys, non-integer and nonpositive quotas, database budgets or thresholds above approved ceilings, nonzero AI budgets, and any enabled unfinished feature.
 
-The app has Bluesky OAuth login plus a cheap `/api/health` route. Login initiation is limited to five attempts per trusted client address per hour and 200 globally per hour using atomic PostgreSQL counters. New accounts require an invited DID and stop at 50. OAuth discovery has a five-second deadline and 1 MB response ceiling and creates no paid API usage. Post lookup, rendering, imports, and model calls remain disabled.
+The app has Bluesky OAuth login plus a cheap `/api/health` route. Login initiation is limited to five attempts per trusted client address per hour and 200 globally per hour using atomic PostgreSQL counters. New accounts require an invited DID and stop at 50. Authenticated public-post previews reserve at most 12 new lookups per account per UTC day and 100 globally per hour before contacting Bluesky. Fresh seven-day cached previews do not spend quota. OAuth discovery and post lookup each have a five-second deadline and 1 MB response ceiling and create no paid API usage. Rendering, imports, and model calls remain disabled.
 
 The internal database budget is 1 GB. Startup records an actual PostgreSQL database-size measurement. New registrations and game writes refresh it at most once every 15 minutes; `/owner` refreshes it on demand. At 70% the owner page warns, at 85% registration and future card creation stop, and at 95% new game state changes stop. `features.readOnlyMode` immediately blocks registration, future card creation, and new game state changes after deploying a reviewed policy change. Measurements and effective controls persist across restarts.
 
@@ -31,7 +31,7 @@ Postgres-backed counters must reserve per-account and global quotas atomically b
 
 Features may only leave `false` when their implementation, permission checks, cost enforcement, and targeted tests land together. Registering a feature in the policy does not authorize increasing its budget. Keep paid AI at zero until a separately approved task includes provider-side restrictions and application cost reservation.
 
-At database growth thresholds, registration and card rendering close before read-only mode. Do not delete hog histories to recover space. The protected owner page reports the measured value, current controls, account count, implemented login quota use, feature flags, and last restore check. It links to Railway rather than claiming local counters show the provider invoice.
+At database growth thresholds, registration and card rendering close before read-only mode. Do not delete hog histories to recover space. The protected owner page reports the measured value, current controls, account count, implemented login and post-lookup quota use, feature flags, and last restore check. It links to Railway rather than claiming local counters show the provider invoice.
 
 ## If usage spikes
 

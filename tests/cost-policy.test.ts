@@ -11,7 +11,10 @@ const fixture = () => JSON.parse(readFileSync(new URL("../config/cost-policy.jso
 test("committed policy enables only enforced controls and keeps paid AI closed", () => {
   const policy = parseCostPolicy(fixture());
   assert.equal(policy.features.registrations, true);
-  assert.ok(Object.entries(policy.features).filter(([name]) => name !== "registrations").every(([, value]) => value === false));
+  assert.equal(policy.features.externalPreviews, true);
+  assert.ok(Object.entries(policy.features)
+    .filter(([name]) => !["registrations", "externalPreviews"].includes(name))
+    .every(([, value]) => value === false));
   assert.equal(policy.paidAiMonthlyBudgetCents, 0);
   assert.equal(policy.railway.computeHardLimitCents, 3_000);
 });
@@ -28,7 +31,8 @@ test("every quota rejects zero, negative, fractional, nonnumeric and excessive v
 });
 
 test("unfinished features reject true and every feature rejects invalid booleans", () => {
-  for (const key of Object.keys(fixture().features).filter(key => !["registrations", "readOnlyMode"].includes(key))) {
+  for (const key of Object.keys(fixture().features)
+    .filter(key => !["registrations", "readOnlyMode", "externalPreviews"].includes(key))) {
     const enabled = fixture();
     enabled.features[key] = true;
     assert.throws(() => parseCostPolicy(enabled), /must remain false/);
@@ -43,6 +47,9 @@ test("unfinished features reject true and every feature rejects invalid booleans
   const readOnly = fixture();
   readOnly.features.readOnlyMode = true;
   assert.equal(parseCostPolicy(readOnly).features.readOnlyMode, true);
+  const previewsDisabled = fixture();
+  previewsDisabled.features.externalPreviews = false;
+  assert.equal(parseCostPolicy(previewsDisabled).features.externalPreviews, false);
 });
 
 test("missing and unknown keys fail instead of falling back", () => {

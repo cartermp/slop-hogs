@@ -3,6 +3,7 @@ import { readFile, readdir } from "node:fs/promises";
 import { loadCostPolicy } from "../src/lib/server/cost-policy.ts";
 import { createDatabase, transaction } from "../src/lib/server/database.ts";
 import { refreshOperationalStatus } from "../src/lib/server/operations.ts";
+import { expirePostPreviews } from "../src/lib/server/posts.ts";
 
 const pool = createDatabase();
 try {
@@ -16,6 +17,7 @@ try {
   }
   await pool.query("SELECT id FROM hog_lives LIMIT 0");
   const policy = loadCostPolicy();
+  await expirePostPreviews(pool);
   const status = await transaction(pool, client => refreshOperationalStatus(client, {
     database: policy.database,
     readOnlyMode: policy.features.readOnlyMode,

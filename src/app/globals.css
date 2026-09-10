@@ -69,6 +69,32 @@ h1 { font-size: clamp(2.8rem, 8vw, 5.6rem); line-height: .98; letter-spacing: -.
 .auth-error { color: #ffb1bc; }
 .pen code { overflow-wrap: anywhere; color: #ffc0d8; }
 
+.post-feeder { margin-top: 3rem; border-top: 1px solid #513543; padding-top: 2rem; }
+.post-feeder h2 { margin: .4rem 0 1.25rem; font-size: clamp(1.7rem, 4vw, 2.5rem); }
+.preview-form, .feed-form { max-width: 44rem; }
+.preview-form label, .feed-form label { display: block; margin-bottom: .5rem; color: #ffc0d8; font-size: .85rem; font-weight: 750; }
+.preview-form > div, .feed-form > div { display: flex; gap: .65rem; }
+.preview-form input, .feed-form select {
+  min-width: 0;
+  flex: 1;
+  border: 1px solid #694356;
+  border-radius: .7rem;
+  padding: .8rem .9rem;
+  background: #211920;
+  color: #fff4f8;
+  font: inherit;
+}
+.auth-button:disabled { cursor: wait; opacity: .65; }
+.action-message { max-width: 44rem; color: #baf0ca; line-height: 1.5; }
+.action-error { color: #ffb1bc; }
+.post-preview { max-width: 44rem; margin-top: 1rem; border: 1px solid #694356; border-radius: 1rem; padding: 1.25rem; background: #211920; }
+.post-preview header { display: flex; flex-wrap: wrap; gap: .35rem .65rem; }
+.post-preview header span { color: #bba9b5; }
+.post-preview > p { white-space: pre-wrap; line-height: 1.55; }
+.post-preview > a { color: #ff9ec3; font-weight: 700; text-underline-offset: .2rem; }
+.feed-form { margin-top: 1.5rem; border-top: 1px solid #513543; padding-top: 1.25rem; }
+.recipe-note { margin: .7rem 0 0; color: #bba9b5; font-size: .82rem; line-height: 1.45; }
+
 .owner-page h1 { margin-bottom: 1rem; }
 .operations-warning {
   margin: 1.5rem 0;
@@ -165,6 +191,7 @@ h1 { font-size: clamp(2.8rem, 8vw, 5.6rem); line-height: .98; letter-spacing: -.
   .hog-card:first-child { grid-column: auto; display: block; }
   .hog-card:first-child .hog-stage { min-height: 19rem; }
   .login-form > div { align-items: stretch; flex-direction: column; }
+  .preview-form > div, .feed-form > div { align-items: stretch; flex-direction: column; }
   .operations-grid { grid-template-columns: 1fr; }
   .operations-links { align-items: flex-start; flex-direction: column; }
 }
