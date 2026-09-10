@@ -10,7 +10,7 @@ The owner assigns a bounded task; Codex implements it and returns a reviewable P
 | SH-004 | Postgres schema and atomic persistence | SH-002 | Complete |
 | SH-005 | Minimal-scope Bluesky OAuth | SH-004 | Complete |
 | SH-006 | Railway deployment, budgets, growth controls, backup restore and runbook | SH-004, SH-005 | Repository complete; live owner verification pending |
-| SH-007 | Canonical post previews and feeding quotas | SH-004, SH-005 | Planned |
+| SH-007 | Canonical post previews and feeding quotas | SH-004, SH-005 | Complete |
 | SH-008 | Eight mutations, collection, care and pacing | SH-003, SH-007 | Planned |
 | SH-009 | Public pens, gifts, blocks and owner controls | SH-008 | Planned |
 | SH-010 | Speech templates and capped cards | SH-009 | Planned |
@@ -19,7 +19,7 @@ The owner assigns a bounded task; Codex implements it and returns a reviewable P
 
 ## Current handoff
 
-SH-006 adds persisted database growth measurements, automatic registration and write cutoffs, a manual read-only flag, a protected owner operations page, and source-versus-restored database verification. Live Railway spending controls, resource ceilings, HTTPS OAuth, restart persistence, daily backup scheduling, and one restore still require owner verification before players are invited. SH-007 is next after that gate.
+SH-007 adds authenticated canonical Bluesky post previews, persisted per-account and global lookup quotas, seven-day private preview retention, and canonical URI deduplication within each hog life. Unavailable posts are cached without exposing stale content, and game results retain their numeric effects separately from expiring source text. Live Railway spending controls, resource ceilings, HTTPS OAuth, restart persistence, daily backup scheduling, and one restore still require owner verification before players are invited. SH-008 is next.
 
 Run `npm ci`, `npm run check`, `npm run build`, and `npm run smoke` to reproduce automated validation. Run `npm run dev`, then open `/gallery` to compare the five appearances at desktop and phone widths.
 

@@ -2,6 +2,8 @@ import Link from "next/link";
 import { cookies } from "next/headers";
 import { Hog } from "@/components/hog/Hog";
 import { BASE_HOG } from "@/components/hog/appearance";
+import { PostFeeder } from "@/components/PostFeeder";
+import { loadCostPolicy } from "@/lib/server/cost-policy";
 import { getDatabase } from "@/lib/server/database";
 import { getAppSession } from "@/lib/server/hogs";
 
@@ -40,7 +42,12 @@ export default async function Home({
       </div>
       {notice && <p className={errorCode ? "auth-notice auth-error" : "auth-notice"}>{notice}</p>}
       {session ? (
-        <form action="/oauth/logout" method="post"><button className="auth-button" type="submit">Sign out</button></form>
+        <>
+          <form action="/oauth/logout" method="post"><button className="auth-button" type="submit">Sign out</button></form>
+          {loadCostPolicy().features.externalPreviews
+            ? <PostFeeder />
+            : <p className="note">Public-post feeding is temporarily disabled.</p>}
+        </>
       ) : (
         <form className="login-form" action="/oauth/login" method="post">
           <label htmlFor="handle">Bluesky handle</label>
@@ -50,7 +57,7 @@ export default async function Home({
           </div>
         </form>
       )}
-      <p className="note">Feeding from public posts arrives in SH-007. This login grants no posting permission.</p>
+      <p className="note">Slop Hogs only reads public posts you paste. It never receives permission to publish.</p>
       {process.env.NODE_ENV !== "production" && <Link className="lab-link" href="/gallery">Visit the local mutation lab →</Link>}
     </main>
   );

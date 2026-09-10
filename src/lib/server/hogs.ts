@@ -1,6 +1,13 @@
 import { createHash, randomBytes, randomUUID } from "node:crypto";
 import type { Pool, PoolClient } from "pg";
-import { applyGameAction, createGameState, parseGameAction, parseGameState, type GameResult } from "../game.ts";
+import {
+  applyGameAction,
+  createGameState,
+  parseGameAction,
+  parseGameState,
+  type FoodKind,
+  type GameResult,
+} from "../game.ts";
 import { loadCostPolicy } from "./cost-policy.ts";
 import { transaction } from "./database.ts";
 import { isValidDid } from "./dids.ts";
@@ -13,6 +20,8 @@ const sessionToken = /^[0-9a-f]{64}$/;
 export class RegistrationClosedError extends Error {}
 export class NotInvitedError extends Error {}
 export class AccountLimitError extends Error {}
+export class DuplicatePostError extends Error {}
+export class PostPreviewExpiredError extends Error {}
 
 async function ensureHog(client: PoolClient, verifiedDid: string): Promise<string> {
   const existing = await client.query("SELECT id FROM hog_lives WHERE owner_did=$1 AND ended_at IS NULL", [verifiedDid]);
@@ -125,14 +134,18 @@ async function readOnlyAction(
   hogId: string,
   requestId: string,
   action: ReturnType<typeof parseGameAction>,
+  source: { uri: string; cid: string } | null,
 ): Promise<GameResult> {
   const existing = await pool.query<{
     ended_at: Date | null;
     receipt_id: string | null;
     action: unknown | null;
     result: GameResult | null;
+    source_uri: string | null;
+    observed_source_cid: string | null;
   }>(
-    `SELECT hog.ended_at, receipt.hog_id::text AS receipt_id, receipt.action, receipt.result
+    `SELECT hog.ended_at, receipt.hog_id::text AS receipt_id, receipt.action, receipt.result,
+            receipt.source_uri, receipt.observed_source_cid
        FROM hog_lives hog
        JOIN app_sessions session
          ON session.owner_did=hog.owner_did
@@ -146,7 +159,11 @@ async function readOnlyAction(
   if (!existing.rowCount) throw new Error("Unauthorized");
   const row = existing.rows[0];
   if (row.receipt_id) {
-    if (JSON.stringify(parseGameAction(row.action)) !== JSON.stringify(action)) {
+    if (
+      JSON.stringify(parseGameAction(row.action)) !== JSON.stringify(action)
+      || row.source_uri !== (source?.uri ?? null)
+      || row.observed_source_cid !== (source?.cid ?? null)
+    ) {
       throw new Error("Request ID already used for a different action");
     }
     return row.result as GameResult;
@@ -163,6 +180,46 @@ export async function feedHog(
   input: unknown,
   operationalPolicy?: OperationalPolicy,
 ): Promise<GameResult> {
+  return feedHogInternal(pool, token, hogId, requestId, input, null, operationalPolicy);
+}
+
+export async function feedHogFromPost(
+  pool: Pool,
+  token: string,
+  hogId: string,
+  requestId: string,
+  food: FoodKind,
+  sourceUri: string,
+  sourceCid: string,
+  operationalPolicy?: OperationalPolicy,
+): Promise<GameResult> {
+  if (
+    sourceUri.length > 2_048
+    || !sourceUri.startsWith("at://")
+    || !/^[A-Za-z0-9]{1,512}$/.test(sourceCid)
+  ) {
+    throw new Error("Invalid post source");
+  }
+  return feedHogInternal(
+    pool,
+    token,
+    hogId,
+    requestId,
+    { type: "feed", food },
+    { uri: sourceUri, cid: sourceCid },
+    operationalPolicy,
+  );
+}
+
+async function feedHogInternal(
+  pool: Pool,
+  token: string,
+  hogId: string,
+  requestId: string,
+  input: unknown,
+  source: { uri: string; cid: string } | null,
+  operationalPolicy?: OperationalPolicy,
+): Promise<GameResult> {
   if (!uuid.test(hogId) || !uuid.test(requestId)) throw new Error("Invalid action identifiers");
   if (!sessionToken.test(token)) throw new Error("Unauthorized");
   const action = parseGameAction(input);
@@ -174,24 +231,55 @@ export async function feedHog(
     };
   }
   const controls = await refreshOperationalStatusForPool(pool, operationalPolicy);
-  if (controls.readOnly) return readOnlyAction(pool, token, hogId, requestId, action);
+  if (controls.readOnly) return readOnlyAction(pool, token, hogId, requestId, action, source);
   const result = await transaction(pool, async client => {
     // Serialize each hog before checking expiry/time. Waiting requests cannot use stale time.
     const hog = await client.query("SELECT owner_did, state, ended_at FROM hog_lives WHERE id=$1 FOR UPDATE", [hogId]);
     const session = await client.query("SELECT owner_did FROM app_sessions WHERE token_hash=$1 AND expires_at > clock_timestamp() FOR SHARE", [hash(token)]);
     if (!hog.rowCount || !session.rowCount || hog.rows[0].owner_did !== session.rows[0].owner_did) throw new Error("Unauthorized");
-    const previous = await client.query("SELECT action, result FROM hog_actions WHERE hog_id=$1 AND request_id=$2", [hogId, requestId]);
+    const previous = await client.query(
+      `SELECT action, result, source_uri, observed_source_cid
+         FROM hog_actions WHERE hog_id=$1 AND request_id=$2`,
+      [hogId, requestId],
+    );
     if (previous.rowCount) {
-      if (JSON.stringify(parseGameAction(previous.rows[0].action)) !== JSON.stringify(action)) throw new Error("Request ID already used for a different action");
+      if (
+        JSON.stringify(parseGameAction(previous.rows[0].action)) !== JSON.stringify(action)
+        || previous.rows[0].source_uri !== (source?.uri ?? null)
+        || previous.rows[0].observed_source_cid !== (source?.cid ?? null)
+      ) {
+        throw new Error("Request ID already used for a different action");
+      }
       return previous.rows[0].result as GameResult;
     }
     if (hog.rows[0].ended_at) throw new Error("Hog life has ended");
+    let observedSourceCid: string | null = null;
+    if (source) {
+      const sourceRow = await client.query<{ observed_cid: string }>(
+        `SELECT observed_cid FROM post_sources
+          WHERE canonical_uri=$1 AND observed_cid=$2 AND available
+            AND preview_expires_at > clock_timestamp()
+          FOR SHARE`,
+        [source.uri, source.cid],
+      );
+      if (!sourceRow.rowCount) throw new PostPreviewExpiredError("The post changed or expired. Preview it again before feeding.");
+      const duplicate = await client.query(
+        "SELECT 1 FROM hog_actions WHERE hog_id=$1 AND source_uri=$2",
+        [hogId, source.uri],
+      );
+      if (duplicate.rowCount) throw new DuplicatePostError("This hog has already eaten that post");
+      observedSourceCid = sourceRow.rows[0].observed_cid;
+    }
     const clock = await client.query("SELECT floor(extract(epoch FROM clock_timestamp()) * 1000)::float8 AS now");
     const state = parseGameState(hog.rows[0].state);
     const result = applyGameAction(state, action, Math.max(clock.rows[0].now, state.updatedAtMs));
     await client.query("UPDATE hog_lives SET state=$2 WHERE id=$1", [hogId, result.state]);
     // State and ordered events are committed together in the same action receipt.
-    await client.query("INSERT INTO hog_actions(hog_id, request_id, action, result) VALUES ($1,$2,$3,$4)", [hogId, requestId, action, result]);
+    await client.query(
+      `INSERT INTO hog_actions(hog_id, request_id, action, result, source_uri, observed_source_cid)
+       VALUES ($1,$2,$3,$4,$5,$6)`,
+      [hogId, requestId, action, result, source?.uri ?? null, observedSourceCid],
+    );
     return result;
   });
   return result;

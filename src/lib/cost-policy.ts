@@ -21,12 +21,12 @@ const databaseCeilings = {
 const featureNames = [
   "registrations", "readOnlyMode", "externalPreviews", "cardRendering", "activityImports", "paidAi",
 ] as const;
-const implementedFeatures = new Set<(typeof featureNames)[number]>(["registrations", "readOnlyMode"]);
+const implementedFeatures = new Set<(typeof featureNames)[number]>(["registrations", "readOnlyMode", "externalPreviews"]);
 
 type Limits = { [K in keyof typeof limitCeilings]: number };
 type DatabasePolicy = { [K in keyof typeof databaseCeilings]: number };
-type Features = { registrations: boolean; readOnlyMode: boolean } & {
-  [K in Exclude<typeof featureNames[number], "registrations" | "readOnlyMode">]: false
+type Features = { registrations: boolean; readOnlyMode: boolean; externalPreviews: boolean } & {
+  [K in Exclude<typeof featureNames[number], "registrations" | "readOnlyMode" | "externalPreviews">]: false
 };
 export interface CostPolicy {
   version: 2;
@@ -95,7 +95,7 @@ export function parseCostPolicy(input: unknown): CostPolicy {
     features: {
       registrations: rawFeatures.registrations as boolean,
       readOnlyMode: rawFeatures.readOnlyMode as boolean,
-      externalPreviews: false,
+      externalPreviews: rawFeatures.externalPreviews as boolean,
       cardRendering: false,
       activityImports: false,
       paidAi: false,
