@@ -2,7 +2,10 @@ CREATE TABLE post_sources (
   canonical_uri text PRIMARY KEY CHECK (
     canonical_uri ~ '^at://did:[a-z]+:[A-Za-z0-9._:%-]+/app\.bsky\.feed\.post/[A-Za-z0-9._~:-]+$'
   ),
-  observed_cid text NOT NULL CHECK (observed_cid ~ '^[A-Za-z0-9]{1,512}$'),
+  observed_cid text NOT NULL CHECK (
+    length(observed_cid) BETWEEN 1 AND 512
+    AND observed_cid ~ '^[A-Za-z0-9]+$'
+  ),
   author_did text NOT NULL CHECK (length(author_did) BETWEEN 8 AND 2048),
   author_handle text CHECK (author_handle IS NULL OR length(author_handle) BETWEEN 1 AND 253),
   author_display_name text CHECK (author_display_name IS NULL OR length(author_display_name) <= 640),
