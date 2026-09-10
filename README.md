@@ -2,7 +2,10 @@
 
 A Bluesky-linked virtual pet with a terrible diet. Built by one developer and Codex in small asynchronous tasks.
 
-SH-011 completes the replay loop with one deterministic ending, durable tombstones, and explicit next generations. A terminal meal freezes the final rules state and versioned appearance in PostgreSQL; the account's stable public pen keeps that history while a fresh hog starts.
+SH-012 playtest preflight makes each hog's lifetime favorite, recent six-meal
+diet, and ending-relevant stats visible so invited players can pursue a build
+deliberately. The [invited playtest protocol](docs/playtest.md) is ready, but
+the live Railway gate and invited session still require owner execution.
 
 ## Run locally
 
@@ -56,5 +59,10 @@ The owner-only `/owner` page shows application feature flags, implemented quota 
 - [Implementation plan](docs/implementation-plan.md)
 - [Architecture decisions](docs/decisions.md)
 - [Cost controls and deployment gate](docs/cost-controls.md)
+- [Invited playtest protocol](docs/playtest.md)
 
-Railway is the intended host. Repository support through SH-011 is complete, but no hosted resource or dashboard setting can be verified from source control and CI does not deploy. Complete the live checklist in the runbook before inviting players. The next product task is SH-012.
+Railway is the intended host. Repository support through SH-011 and SH-012
+preflight is complete, but no hosted resource or dashboard setting can be
+verified from source control and CI does not deploy. Complete the live checklist
+in the runbook before inviting players; SH-012 remains open until the invited
+session and its observed fixes are complete.

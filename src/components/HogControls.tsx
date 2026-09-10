@@ -36,6 +36,10 @@ export function HogControls({
     <section className="hog-controls" aria-labelledby="care-title">
       <p className="eyebrow">Daily care</p>
       <h2 id="care-title">Keep the problem alive.</h2>
+      <p className="care-intro">
+        The named build follows your hog&apos;s lifetime favorite. Mutations react to its last six meals,
+        so repeat a flavor to steer the result.
+      </p>
       <div className="care-grid">
         <form action={feedAction} className="care-card">
           <h3>Meal tray</h3>
