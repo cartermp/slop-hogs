@@ -49,7 +49,7 @@ npm run simulate
 
 `config/cost-policy.json` holds the approved initial limits. Startup refuses missing, malformed, or unsafe settings. Invite-only registration and external previews are enabled. New public lookups are limited to 12 per account per UTC day and 100 globally per hour; cached previews do not spend lookup quota. Visitor treats are limited to three sent per account per UTC day, ten received per pen per day, one sender-to-pen gift per day, and 20 pending gifts per active hog. Authenticated owners can render at most two new cards per UTC day and the app can render 50 globally; failed render attempts count, one render runs per app instance, PNGs stop at 250 KB each, and stored cards stop at 250 MB total. The app records database size at startup and at most every 15 minutes during writes. It warns at 70% of the 1 GB internal budget, blocks registrations and cards at 85%, and rejects new game state changes at 95%. `features.readOnlyMode` is the manual emergency stop.
 
-The Railway dollar values are **configuration targets, not a billing cap applied by this code**. Configure the workspace dashboard before deployment. Request quotas must be implemented atomically with each future feature before enabling it. See [cost controls](docs/cost-controls.md).
+The Railway dollar values are **configuration targets, not a billing cap applied by this code**. Configure the workspace dashboard before deployment. Login handle suggestions return at most five accounts and are limited to 60 searches per client address and 1,000 globally each hour. Request quotas must be implemented atomically with each future feature before enabling it. See [cost controls](docs/cost-controls.md).
 
 ## Working together
 

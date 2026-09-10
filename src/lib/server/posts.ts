@@ -1,14 +1,13 @@
 import type { Pool, PoolClient } from "pg";
 import type { CostPolicy } from "../cost-policy.ts";
 import type { PreviewSummary } from "../post-form.ts";
+import { BLUESKY_PUBLIC_API, isValidBlueskyHandle } from "../bluesky-handles.ts";
 import { transaction } from "./database.ts";
 import { isValidDid } from "./dids.ts";
 import { getAppSession } from "./hogs.ts";
 
 const POST_COLLECTION = "app.bsky.feed.post";
-const PUBLIC_API = "https://public.api.bsky.app/xrpc/app.bsky.feed.getPosts";
 const PREVIEW_RETENTION_DAYS = 7;
-const handlePattern = /^(?=.{1,253}$)(?:[A-Za-z0-9](?:[A-Za-z0-9-]{0,61}[A-Za-z0-9])?\.)+[A-Za-z](?:[A-Za-z0-9-]{0,61}[A-Za-z0-9])?$/;
 const recordKeyPattern = /^[A-Za-z0-9._~:-]{1,512}$/;
 const canonicalUriPattern = /^at:\/\/(did:[a-z]+:[A-Za-z0-9._:%-]+)\/app\.bsky\.feed\.post\/([A-Za-z0-9._~:-]{1,512})$/;
 const cidPattern = /^[A-Za-z0-9]{1,512}$/;
@@ -69,7 +68,7 @@ export function parseBlueskyPostUrl(input: string): PostTarget {
   }
   const actor = parts[2];
   const recordKey = parts[4];
-  if ((!isValidDid(actor) && !handlePattern.test(actor)) || !recordKeyPattern.test(recordKey)) {
+  if ((!isValidDid(actor) && !isValidBlueskyHandle(actor)) || !recordKeyPattern.test(recordKey)) {
     throw new InvalidPostUrlError("The Bluesky post URL has an invalid account or post identifier");
   }
   const normalizedActor = isValidDid(actor) ? actor : actor.toLowerCase();
@@ -99,7 +98,7 @@ function parseRemotePost(input: unknown, target: PostTarget): PostPreview {
     || authorDid !== canonical[1]
     || !isValidDid(authorDid)
     || typeof authorHandle !== "string"
-    || !handlePattern.test(authorHandle)
+    || !isValidBlueskyHandle(authorHandle)
     || !cidPattern.test(post.cid)
   ) {
     throw new PostLookupError("Bluesky returned an invalid canonical post identity");
@@ -166,12 +165,15 @@ export async function fetchPostPreview(
   const timeout = new AbortController();
   const timer = setTimeout(() => timeout.abort(), limits.externalRequestTimeoutMs);
   try {
-    const response = await fetchImplementation(`${PUBLIC_API}?uris=${encodeURIComponent(target.atUri)}`, {
-      headers: { accept: "application/json" },
-      redirect: "error",
-      cache: "no-store",
-      signal: timeout.signal,
-    });
+    const response = await fetchImplementation(
+      `${BLUESKY_PUBLIC_API}/xrpc/app.bsky.feed.getPosts?uris=${encodeURIComponent(target.atUri)}`,
+      {
+        headers: { accept: "application/json" },
+        redirect: "error",
+        cache: "no-store",
+        signal: timeout.signal,
+      },
+    );
     if (response.status === 400 || response.status === 404) {
       await response.body?.cancel();
       throw new PostUnavailableError("That post is unavailable");
