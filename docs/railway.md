@@ -24,8 +24,8 @@ Set application variables:
 | OAUTH_PRIVATE_KEY | P-256 EC private key generated outside the repository |
 | OAUTH_ENCRYPTION_KEY | Base64-encoded 32-byte key generated outside the repository |
 | OAUTH_KEY_ID | Stable public key identifier, for example `slop-hogs-1` |
-| BLUESKY_INVITED_DIDS | Comma-separated invited account DIDs; empty means no new accounts |
-| SLOP_HOGS_OWNER_DIDS | Comma-separated owner DIDs allowed to open `/owner` |
+| BLUESKY_INVITED_DIDS | Comma-separated invited account DIDs; empty means only configured owners can create accounts |
+| SLOP_HOGS_OWNER_DIDS | Comma-separated owner DIDs allowed to create an account and open `/owner` |
 | TRUSTED_PROXY_COUNT | `1` for Railway's forwarding proxy |
 
 Use the private DATABASE_URL, not DATABASE_PUBLIC_URL. Do not add TEST_DATABASE_URL or paid AI keys. Keep OAuth keys in Railway variables, never in `NEXT_PUBLIC_` variables or operating notes. Do not attach a volume to the app. Its filesystem is disposable.
