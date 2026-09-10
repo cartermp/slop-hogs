@@ -9,7 +9,8 @@ import { Tombstone } from "@/components/Tombstone";
 import { Hog } from "@/components/hog/Hog";
 import { appearanceForState, BASE_HOG } from "@/components/hog/appearance";
 import { PostFeeder } from "@/components/PostFeeder";
-import { MUTATION_CATALOG } from "@/lib/game";
+import { FOOD_LABELS } from "@/lib/food";
+import { MUTATION_CATALOG, favoriteFood } from "@/lib/game";
 import { loadCostPolicy } from "@/lib/server/cost-policy";
 import { getDatabase } from "@/lib/server/database";
 import { getHogProfile } from "@/lib/server/lifecycle";
@@ -41,6 +42,7 @@ export default async function Home({
   const latestTombstone = profile?.tombstones[0] ?? null;
   const policy = loadCostPolicy();
   const appearance = hog ? appearanceForState(hog.state) : BASE_HOG;
+  const favorite = hog ? favoriteFood(hog.state.taste) : null;
   const query = await searchParams;
   const errorCode = typeof query.auth_error === "string" ? query.auth_error : "";
   const notice = messages[errorCode]
@@ -59,16 +61,27 @@ export default async function Home({
             <p className="pen-label">{appearance.name}</p>
             <p>
               {appearance.description}<br />
-              Generation {hog.generation}<br />
-              Verified owner: <code>{hog.ownerDid}</code><br />
-              Hog: <code>{hog.hogId}</code>
+              Generation {hog.generation} - {hog.state.mealsEaten} lifetime meals
             </p>
             <dl className="pen-stats">
-              <div><dt>Meals</dt><dd>{hog.state.mealsAvailable}/6</dd></div>
+              <div><dt>Tray</dt><dd>{hog.state.mealsAvailable}/6</dd></div>
               <div><dt>Hunger</dt><dd>{hog.state.hunger}</dd></div>
+              <div><dt>Slop</dt><dd>{hog.state.stats.slop}</dd></div>
+              <div><dt>Brain</dt><dd>{hog.state.stats.brain}</dd></div>
               <div><dt>Filth</dt><dd>{hog.state.stats.filth}</dd></div>
               <div><dt>Joy</dt><dd>{hog.state.stats.joy}</dd></div>
             </dl>
+            <div className="diet-readout">
+              <p><strong>Lifetime favorite:</strong> {favorite ? FOOD_LABELS[favorite] : "Mixed slop"}</p>
+              <p><strong>Recent meals:</strong></p>
+              {hog.state.recentMeals.length ? (
+                <ol aria-label="Recent meals, oldest to newest">
+                  {hog.state.recentMeals.map((food, index) => (
+                    <li key={`${index}-${food}`}>{FOOD_LABELS[food]}</li>
+                  ))}
+                </ol>
+              ) : <p className="diet-empty">Nothing yet. The next meal starts the build.</p>}
+            </div>
           </div>
         </div>
       ) : latestTombstone ? (

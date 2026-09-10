@@ -72,9 +72,24 @@ h1 { font-size: clamp(2.8rem, 8vw, 5.6rem); line-height: .98; letter-spacing: -.
 .pen-stats div { display: flex; justify-content: space-between; gap: .5rem; border-top: 1px solid #513543; padding-top: .35rem; }
 .pen-stats dt { color: #bba9b5; }
 .pen-stats dd { margin: 0; font-weight: 800; }
+.diet-readout { margin-top: 1.2rem; border-top: 1px solid #513543; padding-top: .8rem; }
+.diet-readout p { font-size: .85rem; }
+.diet-readout strong { color: #ffc0d8; }
+.diet-readout ol { display: flex; flex-wrap: wrap; gap: .35rem; margin: .45rem 0 0; padding: 0; list-style: none; }
+.diet-readout li {
+  border: 1px solid #694356;
+  border-radius: 999px;
+  padding: .25rem .5rem;
+  background: #211920;
+  color: #ffc0d8;
+  font-size: .68rem;
+  font-weight: 750;
+}
+.diet-readout .diet-empty { margin-top: .3rem; color: #bba9b5; }
 
 .hog-controls, .mutation-collection, .pen-controls, .share-controls, .next-generation, .life-history { margin-top: 3rem; border-top: 1px solid #513543; padding-top: 2rem; }
 .hog-controls h2, .mutation-collection h2, .pen-controls h2, .share-controls h2, .next-generation h2, .life-history h2 { margin: .4rem 0 1.25rem; font-size: clamp(1.7rem, 4vw, 2.5rem); }
+.care-intro { max-width: 40rem; margin: -0.55rem 0 1.25rem; color: #bba9b5; line-height: 1.6; }
 .care-grid, .mutation-grid { display: grid; grid-template-columns: repeat(2, minmax(0, 1fr)); gap: 1rem; }
 .care-card, .mutation-card { border: 1px solid #513543; border-radius: 1rem; padding: 1.25rem; background: #211920; }
 .care-card h3, .mutation-card h3 { margin: 0 0 .55rem; color: #ffc0d8; }
