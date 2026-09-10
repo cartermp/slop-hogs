@@ -52,7 +52,12 @@ jobs:
           docker build -t slophog-ci .
           docker run --rm --network host -e DATABASE_URL slophog-ci npm run db:migrate
           docker run --rm --network host -e DATABASE_URL slophog-ci npm run db:check
-          docker run -d --name slophog-app --network host -e DATABASE_URL -e PORT=4321 slophog-ci
+          export APP_ORIGIN=https://ci.invalid
+          export OAUTH_PRIVATE_KEY="$(openssl genpkey -algorithm EC -pkeyopt ec_paramgen_curve:P-256 2>/dev/null)"
+          export OAUTH_ENCRYPTION_KEY="$(openssl rand -base64 32)"
+          export TRUSTED_PROXY_COUNT=1
+          docker run -d --name slophog-app --network host -e DATABASE_URL -e PORT=4321 \
+            -e APP_ORIGIN -e OAUTH_PRIVATE_KEY -e OAUTH_ENCRYPTION_KEY -e TRUSTED_PROXY_COUNT slophog-ci
           trap 'docker logs slophog-app; docker rm -f slophog-app' EXIT
           ready=0
           for attempt in $(seq 1 30); do

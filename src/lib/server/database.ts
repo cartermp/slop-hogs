@@ -1,5 +1,7 @@
 import { Pool, type PoolClient } from "pg";
 
+const databaseGlobal = globalThis as typeof globalThis & { slopHogsPool?: Pool };
+
 export function createDatabase(connectionString = process.env.DATABASE_URL): Pool {
   if (!connectionString) throw new Error("DATABASE_URL is required for database operations");
   const pool = new Pool({
@@ -9,6 +11,10 @@ export function createDatabase(connectionString = process.env.DATABASE_URL): Poo
   });
   pool.on("error", () => console.error("An idle database connection failed"));
   return pool;
+}
+
+export function getDatabase(): Pool {
+  return databaseGlobal.slopHogsPool ??= createDatabase();
 }
 
 export async function transaction<T>(pool: Pool, work: (client: PoolClient) => Promise<T>): Promise<T> {

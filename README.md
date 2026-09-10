@@ -2,7 +2,7 @@
 
 A Bluesky-linked virtual pet with a terrible diet. Built by one developer and Codex in small asynchronous tasks.
 
-SH-004 adds PostgreSQL storage and atomic feeding functions. Sign-in and public feeding routes are not implemented yet.
+SH-005 adds minimal-permission Bluesky OAuth, encrypted provider sessions, and revocable application sessions. Public-post feeding is not implemented yet.
 
 ## Run locally
 
@@ -20,6 +20,15 @@ Open http://localhost:3000. No database, provider account, or API key is require
 
 In development, open http://localhost:3000/gallery to compare six-meal AI image, generated post, chatbot screenshot, human post, and shitpost builds. The gallery returns a normal not-found page in production.
 
+The shell and gallery still run without auth configuration. To exercise OAuth, configure PostgreSQL as described in [database development](docs/database.md), run migrations, and set `APP_ORIGIN`, `OAUTH_PRIVATE_KEY`, `OAUTH_ENCRYPTION_KEY`, and `BLUESKY_INVITED_DIDS`. Generate the two secrets with:
+
+```sh
+openssl genpkey -algorithm EC -pkeyopt ec_paramgen_curve:P-256
+openssl rand -base64 32
+```
+
+The P-256 private key signs OAuth client authentication with ES256; the 32-byte key encrypts SDK state and provider sessions in PostgreSQL. Keep both outside the repository. OAuth metadata and callbacks require the exact configured origin; production must use HTTPS.
+
 ## Check a change
 
 Database setup and real concurrency checks are in [database development](docs/database.md). The shell still runs without a database.
@@ -35,7 +44,7 @@ npm run simulate
 
 ## Cost boundary
 
-`config/cost-policy.json` holds the approved initial limits. Startup refuses missing, malformed, or unsafe settings. Every unfinished feature is disabled, and there are no paid API calls or credentials in this application.
+`config/cost-policy.json` holds the approved initial limits. Startup refuses missing, malformed, or unsafe settings. Invite-only registration is enabled with a 50-account cap and bounded login initiation; every other unfinished feature remains disabled. OAuth discovery is the only external work in this slice, and there are no paid API calls or committed credentials.
 
 The Railway dollar values are **configuration targets, not a billing cap applied by this code**. Configure the workspace dashboard before deployment. Request quotas must be implemented atomically with each future feature before enabling it. See [cost controls](docs/cost-controls.md).
 
@@ -48,4 +57,4 @@ The [Railway deployment runbook](docs/railway.md) covers the first manual deploy
 - [Architecture decisions](docs/decisions.md)
 - [Cost controls and deployment gate](docs/cost-controls.md)
 
-Railway is the intended host. No hosted resources are created by this commit, and CI does not deploy. Next task: SH-005, Bluesky OAuth and authenticated sessions.
+Railway is the intended host. No hosted resources are created by this commit, and CI does not deploy. Next task: SH-006b, backup restore and remaining launch controls.

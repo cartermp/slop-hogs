@@ -8,3 +8,5 @@
 - The starter is intentionally not a playable mockup. SH-002 implements state transitions; SH-003 implements the hog renderer.
 - Keep production dependencies exact and the lockfile committed. Review dependency changes on their own merits rather than updating automatically.
 - Keep deployment manual. Do not create cloud resources or change spending limits as a side effect of routine development.
+- Use the official `@atproto/oauth-client-node` SDK with only the base `atproto` identity scope. Store its state and provider sessions encrypted in PostgreSQL, coordinate refreshes with advisory locks, and give browsers a separate opaque application cookie.
+- Keep alpha signup invite-only through a server-side DID allowlist. Existing verified accounts may return after removal from the allowlist; new accounts still obey the atomic 50-account policy cap.

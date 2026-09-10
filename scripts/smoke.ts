@@ -1,12 +1,23 @@
 import assert from "node:assert/strict";
 import { spawn } from "node:child_process";
+import { generateKeyPairSync, randomBytes } from "node:crypto";
 import { once } from "node:events";
 import { setTimeout as delay } from "node:timers/promises";
 
-// One bounded production-server check. No external services or credentials.
+// One bounded production-server check with disposable OAuth credentials.
 const port = 4317;
+const { privateKey } = generateKeyPairSync("ec", { namedCurve: "P-256" });
 const server = spawn(process.execPath, ["node_modules/next/dist/bin/next", "start", "-p", String(port), "-H", "127.0.0.1"], {
-  env: { ...process.env, NODE_ENV: "production", NEXT_TELEMETRY_DISABLED: "1" },
+  env: {
+    ...process.env,
+    NODE_ENV: "production",
+    NEXT_TELEMETRY_DISABLED: "1",
+    DATABASE_URL: process.env.DATABASE_URL ?? "postgresql://test:test@127.0.0.1:1/test",
+    APP_ORIGIN: "https://hogs.example",
+    OAUTH_PRIVATE_KEY: privateKey.export({ type: "pkcs8", format: "pem" }).toString(),
+    OAUTH_ENCRYPTION_KEY: randomBytes(32).toString("base64"),
+    TRUSTED_PROXY_COUNT: "1",
+  },
   stdio: ["ignore", "pipe", "pipe"],
 });
 let output = "";
@@ -34,9 +45,24 @@ try {
   assert.match(html, /data-hog-variant="base"/);
   assert.match(html, /Your hog is almost ready/);
   assert.equal(response.headers.get("x-powered-by"), null);
+  const metadataResponse = await fetch(`http://127.0.0.1:${port}/oauth/client-metadata.json`, {
+    signal: AbortSignal.timeout(5_000),
+  });
+  assert.equal(metadataResponse.status, 200);
+  const metadata = await metadataResponse.json();
+  assert.equal(metadata.scope, "atproto");
+  assert.equal(metadata.token_endpoint_auth_signing_alg, "ES256");
+  assert.deepEqual(metadata.redirect_uris, ["https://hogs.example/oauth/callback"]);
+  const jwksResponse = await fetch(`http://127.0.0.1:${port}/oauth/jwks.json`, {
+    signal: AbortSignal.timeout(5_000),
+  });
+  assert.equal(jwksResponse.status, 200);
+  const jwks = await jwksResponse.json();
+  assert.equal(jwks.keys.length, 1);
+  assert.equal(jwks.keys[0].d, undefined, "JWKS must expose only the public key");
   const gallery = await fetch(`http://127.0.0.1:${port}/gallery`, { signal: AbortSignal.timeout(5_000) });
   assert.equal(gallery.status, 404, "The development art gallery must stay out of production");
-  console.log("Production shell and health endpoint passed.");
+  console.log("Production shell, health, and OAuth metadata endpoints passed.");
 } catch (error) {
   console.error(output);
   throw error;

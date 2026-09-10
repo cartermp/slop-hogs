@@ -3,7 +3,15 @@ import { randomUUID } from "node:crypto";
 import { test } from "node:test";
 import { createDatabase, transaction } from "../src/lib/server/database.ts";
 import { migrate } from "../src/lib/server/migrations.ts";
-import { provisionHog, issueSession, revokeSession, feedHog } from "../src/lib/server/hogs.ts";
+import {
+  completeOAuthSignIn,
+  feedHog,
+  getAppSession,
+  issueSession,
+  provisionHog,
+  RegistrationClosedError,
+  revokeSession,
+} from "../src/lib/server/hogs.ts";
 import { deleteTestData, previewTestDataCleanup } from "../src/lib/server/test-data-cleanup.ts";
 
 test("real PostgreSQL persistence, retries, isolation and rollback", async () => {
@@ -12,6 +20,8 @@ test("real PostgreSQL persistence, retries, isolation and rollback", async () =>
   const pool = createDatabase(process.env.TEST_DATABASE_URL);
   const did = `did:plc:test${randomUUID().replaceAll("-", "")}`;
   const otherDid = `did:plc:test${randomUUID().replaceAll("-", "")}`;
+  const oauthDid = `did:plc:test${randomUUID().replaceAll("-", "")}`;
+  const closedDid = `did:plc:test${randomUUID().replaceAll("-", "")}`;
   const action = { type: "feed", food: "ai_image" };
   try {
     await Promise.all([migrate(pool), migrate(pool)]);
@@ -48,30 +58,65 @@ test("real PostgreSQL persistence, retries, isolation and rollback", async () =>
     const newToken = await issueSession(pool, did);
     await revokeSession(pool, newToken);
     await assert.rejects(feedHog(pool, newToken, hog, request, action), /Unauthorized/);
-    assert.deepEqual(await previewTestDataCleanup(pool, [did, otherDid]), {
-      accounts: 2,
-      hogLives: 2,
-      appSessions: 2,
+    await assert.rejects(
+      completeOAuthSignIn(pool, closedDid, {
+        registrationsEnabled: false,
+        accountLimit: 50,
+        invitedDids: new Set([closedDid]),
+      }),
+      RegistrationClosedError,
+    );
+    const authenticated = await completeOAuthSignIn(pool, oauthDid, {
+      registrationsEnabled: true,
+      accountLimit: 50,
+      invitedDids: new Set([oauthDid]),
+    });
+    assert.deepEqual(await getAppSession(pool, authenticated.token), {
+      ownerDid: oauthDid,
+      hogId: authenticated.hogId,
+    });
+    const rotated = await completeOAuthSignIn(pool, oauthDid, {
+      registrationsEnabled: true,
+      accountLimit: 50,
+      invitedDids: new Set(),
+    });
+    assert.equal(rotated.hogId, authenticated.hogId, "returning verified accounts retain their active hog");
+    assert.equal(await getAppSession(pool, authenticated.token), null, "a new login rotates the app session");
+    assert.equal((await getAppSession(pool, rotated.token))?.ownerDid, oauthDid);
+    await pool.query(
+      "INSERT INTO oauth_sessions(did, encrypted_data) VALUES ($1,$2)",
+      [oauthDid, Buffer.alloc(30)],
+    );
+    const testDids = [did, otherDid, oauthDid, closedDid];
+    assert.deepEqual(await previewTestDataCleanup(pool, testDids), {
+      accounts: 3,
+      hogLives: 3,
+      appSessions: 3,
+      oauthSessions: 1,
       hogActions: 6,
     });
-    assert.deepEqual(await deleteTestData(pool, [did, otherDid]), {
-      accounts: 2,
-      hogLives: 2,
-      appSessions: 2,
+    assert.deepEqual(await deleteTestData(pool, testDids), {
+      accounts: 3,
+      hogLives: 3,
+      appSessions: 3,
+      oauthSessions: 1,
       hogActions: 6,
     });
-    assert.deepEqual(await previewTestDataCleanup(pool, [did, otherDid]), {
+    assert.deepEqual(await previewTestDataCleanup(pool, testDids), {
       accounts: 0,
       hogLives: 0,
       appSessions: 0,
+      oauthSessions: 0,
       hogActions: 0,
     });
   } finally {
     // Remove only this test's uniquely named accounts and dependent fixtures.
-    await pool.query("DELETE FROM hog_actions WHERE hog_id IN (SELECT id FROM hog_lives WHERE owner_did=ANY($1))", [[did, otherDid]]);
-    await pool.query("DELETE FROM app_sessions WHERE owner_did=ANY($1)", [[did, otherDid]]);
-    await pool.query("DELETE FROM hog_lives WHERE owner_did=ANY($1)", [[did, otherDid]]);
-    await pool.query("DELETE FROM accounts WHERE did=ANY($1)", [[did, otherDid]]);
+    const testDids = [did, otherDid, oauthDid, closedDid];
+    await pool.query("DELETE FROM oauth_sessions WHERE did=ANY($1)", [testDids]);
+    await pool.query("DELETE FROM hog_actions WHERE hog_id IN (SELECT id FROM hog_lives WHERE owner_did=ANY($1))", [testDids]);
+    await pool.query("DELETE FROM app_sessions WHERE owner_did=ANY($1)", [testDids]);
+    await pool.query("DELETE FROM hog_lives WHERE owner_did=ANY($1)", [testDids]);
+    await pool.query("DELETE FROM accounts WHERE did=ANY($1)", [testDids]);
     await pool.end();
   }
 });

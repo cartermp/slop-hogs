@@ -42,6 +42,32 @@ h1 { font-size: clamp(2.8rem, 8vw, 5.6rem); line-height: .98; letter-spacing: -.
 .pen .pen-label { font-size: 1.35rem; font-weight: 750; line-height: 1.2; color: #ffc0d8; }
 .note { max-width: 38rem; font-size: 1rem; line-height: 1.6; color: #bba9b5; margin: 1.5rem 0 .5rem; }
 .lab-link { display: inline-block; margin-top: .75rem; color: #ff9ec3; font-weight: 700; text-underline-offset: .25rem; }
+.login-form { max-width: 38rem; margin-top: 1.5rem; }
+.login-form label { display: block; margin-bottom: .5rem; color: #ffc0d8; font-size: .85rem; font-weight: 750; }
+.login-form > div { display: flex; gap: .65rem; }
+.login-form input {
+  min-width: 0;
+  flex: 1;
+  border: 1px solid #694356;
+  border-radius: .7rem;
+  padding: .8rem .9rem;
+  background: #211920;
+  color: #fff4f8;
+  font: inherit;
+}
+.auth-button {
+  border: 0;
+  border-radius: .7rem;
+  padding: .8rem 1rem;
+  background: #ff8fba;
+  color: #28131e;
+  font: inherit;
+  font-weight: 800;
+  cursor: pointer;
+}
+.auth-notice { max-width: 38rem; margin: 1.25rem 0 0; color: #baf0ca; }
+.auth-error { color: #ffb1bc; }
+.pen code { overflow-wrap: anywhere; color: #ffc0d8; }
 
 .hog { display: block; width: 100%; height: auto; overflow: visible; }
 .hog-shadow { fill: rgb(4 2 4 / .35); }
@@ -119,6 +145,7 @@ h1 { font-size: clamp(2.8rem, 8vw, 5.6rem); line-height: .98; letter-spacing: -.
   .hog-grid { grid-template-columns: 1fr; }
   .hog-card:first-child { grid-column: auto; display: block; }
   .hog-card:first-child .hog-stage { min-height: 19rem; }
+  .login-form > div { align-items: stretch; flex-direction: column; }
 }
 
 @media (prefers-reduced-motion: reduce) {

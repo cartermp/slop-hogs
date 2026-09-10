@@ -4,7 +4,7 @@
 
 `config/cost-policy.json` is validated before dev, build, and start. Next.js instrumentation also validates it during Node startup, including when the Next CLI is run directly. The validator rejects unknown or omitted keys, non-integer and nonpositive quotas, values above approved ceilings, nonzero AI budgets, and any enabled unfinished feature.
 
-The app has a static construction page and a cheap `/api/health` route. No signup, outbound post lookup, rendering, imports, database, or model calls exist yet. The configured request limits are requirements for those future implementations, not counters already enforced by this slice.
+The app has Bluesky OAuth login plus a cheap `/api/health` route. Login initiation is limited to five attempts per trusted client address per hour and 200 globally per hour using atomic PostgreSQL counters. New accounts require an invited DID and stop at 50. OAuth discovery has a five-second deadline and 1 MB response ceiling and creates no paid API usage. Post lookup, rendering, imports, and model calls remain disabled.
 
 Do not expose provider budget settings through a public route. Do not place credentials in client-visible environment variables or commit them. App config has no Railway administration token.
 

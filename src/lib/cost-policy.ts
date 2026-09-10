@@ -1,6 +1,8 @@
-/** Version 1 permits configuration only. Feature enforcement ships with each feature. */
+/** Feature enforcement ships with each feature before its flag can be enabled. */
 const limitCeilings = {
   accounts: 50,
+  loginAttemptsPerIpPerHour: 5,
+  loginAttemptsGlobalPerHour: 200,
   postLookupsPerAccountPerDay: 12,
   postLookupsGlobalPerHour: 100,
   cardsPerAccountPerDay: 2,
@@ -13,9 +15,12 @@ const limitCeilings = {
 const featureNames = [
   "registrations", "externalPreviews", "cardRendering", "activityImports", "paidAi",
 ] as const;
+const implementedFeatures = new Set<(typeof featureNames)[number]>(["registrations"]);
 
 type Limits = { [K in keyof typeof limitCeilings]: number };
-type Features = { [K in typeof featureNames[number]]: false };
+type Features = { registrations: boolean } & {
+  [K in Exclude<typeof featureNames[number], "registrations">]: false
+};
 export interface CostPolicy {
   version: 1;
   railway: { usageAlertCents: number; computeHardLimitCents: number };
@@ -62,14 +67,23 @@ export function parseCostPolicy(input: unknown): CostPolicy {
   }
   const rawFeatures = objectWithKeys(root.features, featureNames, "features");
   for (const name of featureNames) {
-    if (rawFeatures[name] !== false) {
+    if (typeof rawFeatures[name] !== "boolean") {
+      throw new Error(`features.${name} must be a boolean`);
+    }
+    if (!implementedFeatures.has(name) && rawFeatures[name] !== false) {
       throw new Error(`features.${name} must remain false until its enforcement is implemented`);
     }
   }
   if (root.paidAiMonthlyBudgetCents !== 0) throw new Error("Paid AI budget must be zero");
   return {
     version: 1, railway, limits,
-    features: Object.fromEntries(featureNames.map(name => [name, false])) as Features,
+    features: {
+      registrations: rawFeatures.registrations as boolean,
+      externalPreviews: false,
+      cardRendering: false,
+      activityImports: false,
+      paidAi: false,
+    },
     paidAiMonthlyBudgetCents: 0,
   };
 }
