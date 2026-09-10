@@ -31,7 +31,7 @@ Deploy that reviewed commit manually. Confirm the commit SHA in Railway matches 
 
 The Dockerfile pins Node 24.19.0 and runs npm ci and next build without database access. It runs as the unprivileged node user. TypeScript stays in the image for the current Next config loader; no extra runtime package is added.
 
-Railway reads the pre-deploy command from `.railway/railway.ts`. It validates policy and applies locked, checksummed migrations through the private network. A failed command blocks deployment. The startup script separately checks database connectivity and required migration checksums, then starts Next on 0.0.0.0 and PORT. Missing credentials or a bad schema prevent startup. Restart retries are capped at two. See [pre-deploy commands](https://docs.railway.com/deployments/pre-deploy-command) and [Infrastructure as Code](https://docs.railway.com/infrastructure-as-code).
+Railway reads the pre-deploy command from `.railway/railway.ts`. It validates policy and applies locked, checksummed migrations through the private network. A failed command blocks deployment. As a startup safeguard, the application reruns the idempotent, advisory-locked migrator, verifies database connectivity and migration checksums, then starts Next on 0.0.0.0 and PORT. Missing credentials or a bad schema prevent startup. Restart retries are capped at two. See [pre-deploy commands](https://docs.railway.com/deployments/pre-deploy-command) and [Infrastructure as Code](https://docs.railway.com/infrastructure-as-code).
 
 ## 4. Generate HTTPS and verify
 
