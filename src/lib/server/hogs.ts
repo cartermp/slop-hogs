@@ -1,8 +1,10 @@
 import { createHash, randomBytes, randomUUID } from "node:crypto";
 import type { Pool, PoolClient } from "pg";
 import { applyGameAction, createGameState, parseGameAction, parseGameState, type GameResult } from "../game.ts";
+import { loadCostPolicy } from "./cost-policy.ts";
 import { transaction } from "./database.ts";
 import { isValidDid } from "./dids.ts";
+import { ReadOnlyError, refreshOperationalStatus, type OperationalPolicy } from "./operations.ts";
 
 const hash = (token: string) => createHash("sha256").update(token).digest("hex");
 const uuid = /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i;
@@ -76,20 +78,22 @@ export async function completeOAuthSignIn(
     registrationsEnabled: boolean;
     accountLimit: number;
     invitedDids: ReadonlySet<string>;
+    operationalPolicy: OperationalPolicy;
   },
 ): Promise<{ token: string; hogId: string }> {
   if (!isValidDid(verifiedDid)) throw new Error("Invalid DID");
-  return transaction(pool, async client => {
+  const result = await transaction(pool, async client => {
     // One global admission lock makes the account cap exact under concurrent callbacks.
     await client.query("SELECT pg_advisory_xact_lock(734005)");
     const existing = await client.query("SELECT did FROM accounts WHERE did=$1 FOR UPDATE", [verifiedDid]);
     if (!existing.rowCount) {
-      if (!options.registrationsEnabled || !options.invitedDids.has(verifiedDid)) {
-        throw new RegistrationClosedError("This account is not invited");
+      const controls = await refreshOperationalStatus(client, options.operationalPolicy);
+      if (!options.registrationsEnabled || controls.registrationsBlocked || !options.invitedDids.has(verifiedDid)) {
+        return { error: "registration_closed" } as const;
       }
       const count = await client.query<{ count: string }>("SELECT count(*)::text AS count FROM accounts");
       if (Number(count.rows[0].count) >= options.accountLimit) {
-        throw new AccountLimitError("The account limit has been reached");
+        return { error: "account_limit" } as const;
       }
       await client.query("INSERT INTO accounts(did) VALUES ($1)", [verifiedDid]);
     }
@@ -103,13 +107,32 @@ export async function completeOAuthSignIn(
     );
     return { token, hogId };
   });
+  if ("error" in result) {
+    if (result.error === "account_limit") throw new AccountLimitError("The account limit has been reached");
+    throw new RegistrationClosedError("This account is not invited");
+  }
+  return result;
 }
 
-export async function feedHog(pool: Pool, token: string, hogId: string, requestId: string, input: unknown): Promise<GameResult> {
+export async function feedHog(
+  pool: Pool,
+  token: string,
+  hogId: string,
+  requestId: string,
+  input: unknown,
+  operationalPolicy?: OperationalPolicy,
+): Promise<GameResult> {
   if (!uuid.test(hogId) || !uuid.test(requestId)) throw new Error("Invalid action identifiers");
   if (!sessionToken.test(token)) throw new Error("Unauthorized");
   const action = parseGameAction(input);
-  return transaction(pool, async client => {
+  if (!operationalPolicy) {
+    const costPolicy = loadCostPolicy();
+    operationalPolicy = {
+      database: costPolicy.database,
+      readOnlyMode: costPolicy.features.readOnlyMode,
+    };
+  }
+  const result = await transaction(pool, async client => {
     // Serialize each hog before checking expiry/time. Waiting requests cannot use stale time.
     const hog = await client.query("SELECT owner_did, state, ended_at FROM hog_lives WHERE id=$1 FOR UPDATE", [hogId]);
     const session = await client.query("SELECT owner_did FROM app_sessions WHERE token_hash=$1 AND expires_at > clock_timestamp() FOR SHARE", [hash(token)]);
@@ -119,6 +142,8 @@ export async function feedHog(pool: Pool, token: string, hogId: string, requestI
       if (JSON.stringify(parseGameAction(previous.rows[0].action)) !== JSON.stringify(action)) throw new Error("Request ID already used for a different action");
       return previous.rows[0].result as GameResult;
     }
+    const controls = await refreshOperationalStatus(client, operationalPolicy);
+    if (controls.readOnly) return { readOnly: true } as const;
     if (hog.rows[0].ended_at) throw new Error("Hog life has ended");
     const clock = await client.query("SELECT floor(extract(epoch FROM clock_timestamp()) * 1000)::float8 AS now");
     const state = parseGameState(hog.rows[0].state);
@@ -128,4 +153,6 @@ export async function feedHog(pool: Pool, token: string, hogId: string, requestI
     await client.query("INSERT INTO hog_actions(hog_id, request_id, action, result) VALUES ($1,$2,$3,$4)", [hogId, requestId, action, result]);
     return result;
   });
+  if ("readOnly" in result) throw new ReadOnlyError("Slop Hogs is temporarily read-only");
+  return result;
 }

@@ -23,6 +23,8 @@
     "db:clean-test-data": "node --env-file-if-exists=.env.local scripts/clean-test-data.ts",
     "test:db": "node --env-file-if-exists=.env.local --test tests/database.integration.ts",
     "db:check": "node --env-file-if-exists=.env.local scripts/check-database.ts",
+    "backup:prepare": "node --env-file-if-exists=.env.local scripts/check-backup-restore.ts prepare",
+    "backup:verify": "node --env-file-if-exists=.env.local scripts/check-backup-restore.ts verify",
     "smoke:deployed": "node scripts/smoke-deployed.ts"
   },
   "dependencies": {

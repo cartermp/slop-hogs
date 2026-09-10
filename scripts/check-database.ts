@@ -1,6 +1,8 @@
 import { createHash } from "node:crypto";
 import { readFile, readdir } from "node:fs/promises";
-import { createDatabase } from "../src/lib/server/database.ts";
+import { loadCostPolicy } from "../src/lib/server/cost-policy.ts";
+import { createDatabase, transaction } from "../src/lib/server/database.ts";
+import { refreshOperationalStatus } from "../src/lib/server/operations.ts";
 
 const pool = createDatabase();
 try {
@@ -13,7 +15,12 @@ try {
     if (!applied.rows.some(row => row.name === name && row.checksum === checksum)) throw new Error("Schema mismatch");
   }
   await pool.query("SELECT id FROM hog_lives LIMIT 0");
-  console.log("Database reachable and required migrations verified.");
+  const policy = loadCostPolicy();
+  const status = await transaction(pool, client => refreshOperationalStatus(client, {
+    database: policy.database,
+    readOnlyMode: policy.features.readOnlyMode,
+  }, true));
+  console.log(`Database reachable; migrations verified; storage is ${status.usedPercent}% of the internal budget.`);
 } catch (error) {
   const detail = error instanceof Error ? error.message : String(error);
   console.error(`Database preflight failed: ${detail}`);

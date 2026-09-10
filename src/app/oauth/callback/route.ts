@@ -26,6 +26,10 @@ export async function GET(request: Request) {
       registrationsEnabled: policy.features.registrations,
       accountLimit: policy.limits.accounts,
       invitedDids: parseInvitedDids(process.env.BLUESKY_INVITED_DIDS),
+      operationalPolicy: {
+        database: policy.database,
+        readOnlyMode: policy.features.readOnlyMode,
+      },
     });
     const response = NextResponse.redirect(new URL("/?signed_in=1", config.origin), 303);
     response.cookies.set(cookieName, appSession.token, {

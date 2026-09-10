@@ -8,7 +8,7 @@ import { parseCostPolicy } from "../src/lib/cost-policy.ts";
 
 const fixture = () => JSON.parse(readFileSync(new URL("../config/cost-policy.json", import.meta.url), "utf8"));
 
-test("committed policy enables only enforced registration and keeps paid AI closed", () => {
+test("committed policy enables only enforced controls and keeps paid AI closed", () => {
   const policy = parseCostPolicy(fixture());
   assert.equal(policy.features.registrations, true);
   assert.ok(Object.entries(policy.features).filter(([name]) => name !== "registrations").every(([, value]) => value === false));
@@ -28,7 +28,7 @@ test("every quota rejects zero, negative, fractional, nonnumeric and excessive v
 });
 
 test("unfinished features reject true and every feature rejects invalid booleans", () => {
-  for (const key of Object.keys(fixture().features).filter(key => key !== "registrations")) {
+  for (const key of Object.keys(fixture().features).filter(key => !["registrations", "readOnlyMode"].includes(key))) {
     const enabled = fixture();
     enabled.features[key] = true;
     assert.throws(() => parseCostPolicy(enabled), /must remain false/);
@@ -40,10 +40,13 @@ test("unfinished features reject true and every feature rejects invalid booleans
       assert.throws(() => parseCostPolicy(input));
     }
   }
+  const readOnly = fixture();
+  readOnly.features.readOnlyMode = true;
+  assert.equal(parseCostPolicy(readOnly).features.readOnlyMode, true);
 });
 
 test("missing and unknown keys fail instead of falling back", () => {
-  for (const section of [null, "railway", "limits", "features"]) {
+  for (const section of [null, "railway", "limits", "database", "features"]) {
     const input = fixture();
     const target = section ? input[section] : input;
     target.typo = 1;
@@ -66,7 +69,7 @@ test("provider budgets cannot exceed the approved amount or invert alert and cut
 });
 
 test("policy version, AI budget and image storage relationships are checked", () => {
-  assert.throws(() => parseCostPolicy({ ...fixture(), version: 2 }));
+  assert.throws(() => parseCostPolicy({ ...fixture(), version: 1 }));
   for (const paidAiMonthlyBudgetCents of [1, -1, "0", null]) {
     assert.throws(() => parseCostPolicy({ ...fixture(), paidAiMonthlyBudgetCents }));
   }
@@ -75,10 +78,28 @@ test("policy version, AI budget and image storage relationships are checked", ()
   assert.throws(() => parseCostPolicy(input));
 });
 
+test("database budget and thresholds can only become stricter", () => {
+  for (const [key, value] of [
+    ["maxBytes", 1_000_000_001],
+    ["warningPercent", 71],
+    ["restrictPercent", 86],
+    ["readOnlyPercent", 96],
+  ] as const) {
+    const input = fixture();
+    input.database[key] = value;
+    assert.throws(() => parseCostPolicy(input), /positive integer/);
+  }
+  for (const database of [
+    { maxBytes: 1_000_000_000, warningPercent: 70, restrictPercent: 70, readOnlyPercent: 95 },
+    { maxBytes: 1_000_000_000, warningPercent: 69, restrictPercent: 85, readOnlyPercent: 85 },
+  ]) assert.throws(() => parseCostPolicy({ ...fixture(), database }), /must increase/);
+});
+
 test("lower finite limits are allowed without enabling features", () => {
   const input = fixture();
   input.limits.accounts = 10;
   input.railway = { usageAlertCents: 500, computeHardLimitCents: 1_000 };
+  input.database = { maxBytes: 500_000_000, warningPercent: 50, restrictPercent: 75, readOnlyPercent: 90 };
   assert.equal(parseCostPolicy(input).limits.accounts, 10);
   input.features.registrations = false;
   assert.equal(parseCostPolicy(input).features.registrations, false);

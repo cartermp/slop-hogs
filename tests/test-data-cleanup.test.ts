@@ -19,6 +19,10 @@ test("cleanup arguments require explicit execution and reject unsafe targets", (
   assert.throws(() => parseCleanupArguments(["not-a-did"]), /Invalid DID/);
   assert.throws(
     () => parseCleanupArguments(["did:plc:deploymentcheck123"]),
-    /retained persistence fixture/,
+    /retained operations fixture/,
+  );
+  assert.throws(
+    () => parseCleanupArguments(["did:plc:backuprestorecheck"]),
+    /retained operations fixture/,
   );
 });

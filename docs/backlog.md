@@ -9,8 +9,7 @@ The owner assigns a bounded task; Codex implements it and returns a reviewable P
 | SH-003 | Base SVG hog and five diet appearances | SH-002 | Complete |
 | SH-004 | Postgres schema and atomic persistence | SH-002 | Complete |
 | SH-005 | Minimal-scope Bluesky OAuth | SH-004 | Complete |
-| SH-006a | Railway image, manual deployment, budgets and restart checks | SH-004 | Repo setup on this branch; live setup pending |
-| SH-006b | Backup restore and remaining launch controls | SH-005, SH-006a | Required before inviting players |
+| SH-006 | Railway deployment, budgets, growth controls, backup restore and runbook | SH-004, SH-005 | Repository complete; live owner verification pending |
 | SH-007 | Canonical post previews and feeding quotas | SH-004, SH-005 | Planned |
 | SH-008 | Eight mutations, collection, care and pacing | SH-003, SH-007 | Planned |
 | SH-009 | Public pens, gifts, blocks and owner controls | SH-008 | Planned |
@@ -20,7 +19,7 @@ The owner assigns a bounded task; Codex implements it and returns a reviewable P
 
 ## Current handoff
 
-SH-005 adds identity-only Bluesky OAuth, encrypted durable provider state, invite-gated account creation, login quotas, and opaque revocable application cookies. SH-006a prepared Railway deployment ahead of OAuth. Live OAuth configuration, spending controls, HTTPS login, database restart, and backup restoration are not yet verified.
+SH-006 adds persisted database growth measurements, automatic registration and write cutoffs, a manual read-only flag, a protected owner operations page, and source-versus-restored database verification. Live Railway spending controls, resource ceilings, HTTPS OAuth, restart persistence, daily backup scheduling, and one restore still require owner verification before players are invited. SH-007 is next after that gate.
 
 Run `npm ci`, `npm run check`, `npm run build`, and `npm run smoke` to reproduce automated validation. Run `npm run dev`, then open `/gallery` to compare the five appearances at desktop and phone widths.
 
