@@ -44,16 +44,53 @@ h1 { font-size: clamp(2.8rem, 8vw, 5.6rem); line-height: .98; letter-spacing: -.
 .lab-link { display: inline-block; margin-top: .75rem; color: #ff9ec3; font-weight: 700; text-underline-offset: .25rem; }
 .login-form { max-width: 38rem; margin-top: 1.5rem; }
 .login-form label { display: block; margin-bottom: .5rem; color: #ffc0d8; font-size: .85rem; font-weight: 750; }
-.login-form > div { display: flex; gap: .65rem; }
+.login-row { display: flex; align-items: flex-start; gap: .65rem; }
+.handle-combobox { position: relative; min-width: 0; flex: 1; }
 .login-form input {
+  width: 100%;
   min-width: 0;
-  flex: 1;
   border: 1px solid #694356;
   border-radius: .7rem;
   padding: .8rem .9rem;
   background: #211920;
   color: #fff4f8;
   font: inherit;
+}
+.handle-suggestions {
+  position: absolute;
+  z-index: 10;
+  top: calc(100% + .35rem);
+  width: 100%;
+  overflow: hidden;
+  border: 1px solid #694356;
+  border-radius: .7rem;
+  background: #211920;
+  box-shadow: 0 1rem 2.5rem rgb(0 0 0 / .4);
+}
+.handle-suggestion {
+  display: flex;
+  width: 100%;
+  flex-direction: column;
+  gap: .15rem;
+  border: 0;
+  border-bottom: 1px solid #513543;
+  padding: .7rem .9rem;
+  background: transparent;
+  color: #fff4f8;
+  font: inherit;
+  text-align: left;
+  cursor: pointer;
+}
+.handle-suggestion:last-child { border-bottom: 0; }
+.handle-suggestion:hover, .handle-suggestion.active { background: #3a2633; }
+.handle-suggestion small { color: #bba9b5; }
+.handle-search-status {
+  position: absolute;
+  width: 1px;
+  height: 1px;
+  overflow: hidden;
+  clip: rect(0, 0, 0, 0);
+  white-space: nowrap;
 }
 .auth-button {
   border: 0;
@@ -315,7 +352,7 @@ h1 { font-size: clamp(2.8rem, 8vw, 5.6rem); line-height: .98; letter-spacing: -.
   .hog-grid { grid-template-columns: 1fr; }
   .hog-card:first-child { grid-column: auto; display: block; }
   .hog-card:first-child .hog-stage { min-height: 19rem; }
-  .login-form > div { align-items: stretch; flex-direction: column; }
+  .login-row { align-items: stretch; flex-direction: column; }
   .preview-form > div, .feed-form > div { align-items: stretch; flex-direction: column; }
   .gift-form > div, .block-form > div { align-items: stretch; flex-direction: column; }
   .operations-grid { grid-template-columns: 1fr; }

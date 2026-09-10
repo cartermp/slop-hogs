@@ -2,6 +2,7 @@ import { randomUUID } from "node:crypto";
 import Link from "next/link";
 import { cookies } from "next/headers";
 import { HogControls } from "@/components/HogControls";
+import { LoginForm } from "@/components/LoginForm";
 import { NextGenerationControls } from "@/components/NextGenerationControls";
 import { PenControls } from "@/components/PenControls";
 import { ShareControls } from "@/components/ShareControls";
@@ -18,6 +19,9 @@ import { getPenManagement } from "@/lib/server/social";
 
 const messages: Record<string, string> = {
   invalid_callback: "Bluesky could not verify that login. Please start again.",
+  invalid_handle: "Enter a valid Bluesky handle.",
+  login_unavailable: "Bluesky login is temporarily unavailable. Please try again.",
+  login_rate_limited: "Too many login attempts. Please wait and try again.",
   not_invited: "That Bluesky account is not on the private-alpha invite list.",
   registration_closed: "New private-alpha registrations are temporarily closed.",
   account_limit: "The private alpha is full.",
@@ -151,13 +155,7 @@ export default async function Home({
           )}
         </>
       ) : (
-        <form className="login-form" action="/oauth/login" method="post">
-          <label htmlFor="handle">Bluesky handle</label>
-          <div>
-            <input id="handle" name="handle" placeholder="you.bsky.social" autoComplete="username" required maxLength={253} />
-            <button className="auth-button" type="submit">Sign in with Bluesky</button>
-          </div>
-        </form>
+        <LoginForm />
       )}
       <p className="note">Slop Hogs only reads public posts you paste. It never receives permission to publish.</p>
       {process.env.NODE_ENV !== "production" && <Link className="lab-link" href="/gallery">Visit the local mutation lab →</Link>}

@@ -10,7 +10,9 @@ import {
   type RuntimeLock,
 } from "@atproto/oauth-client-node";
 import type { Pool } from "pg";
-import { getDatabase, transaction } from "./database.ts";
+import { BLUESKY_PUBLIC_API } from "../bluesky-handles.ts";
+import { getDatabase } from "./database.ts";
+import { requestSource, reserveHourlyAttempt } from "./hourly-rate-limit.ts";
 import { loadCostPolicy } from "./cost-policy.ts";
 import { createClientMetadata, loadOAuthConfig, type OAuthConfig } from "./oauth-config.ts";
 
@@ -167,6 +169,7 @@ async function createOAuthClient(pool: Pool, config: OAuthConfig): Promise<NodeO
     ...stores,
     requestLock: createRequestLock(pool),
     fetch: createBoundedFetch(limits.externalRequestTimeoutMs, limits.externalResponseMaxBytes),
+    handleResolver: BLUESKY_PUBLIC_API,
     allowHttp: config.origin.startsWith("http://"),
   });
 }
@@ -182,43 +185,16 @@ export async function deleteOAuthSession(did: string): Promise<void> {
 
 export class LoginRateLimitError extends Error {}
 
-export function loginSource(request: Request, trustedProxyCount: number): string {
-  if (trustedProxyCount === 0) return "direct";
-  const forwarded = request.headers.get("x-forwarded-for")?.split(",").map(value => value.trim()).filter(Boolean);
-  if (!forwarded || forwarded.length < trustedProxyCount) throw new Error("Trusted proxy address is missing");
-  return forwarded[forwarded.length - trustedProxyCount];
-}
+export const loginSource = requestSource;
 
 export async function reserveLoginAttempt(
   pool: Pool,
   source: string,
   limits: { loginAttemptsPerIpPerHour: number; loginAttemptsGlobalPerHour: number },
 ): Promise<void> {
-  const sourceHash = createHash("sha256").update(`login:${source}`).digest("hex");
-  await transaction(pool, async client => {
-    await client.query(
-      `DELETE FROM oauth_login_attempts WHERE (bucket_start, source_hash) IN (
-         SELECT bucket_start, source_hash FROM oauth_login_attempts
-          WHERE bucket_start < date_trunc('hour', clock_timestamp()) - interval '24 hours'
-          ORDER BY bucket_start
-          LIMIT 100
-       )`,
-    );
-    const increment = async (key: string): Promise<number> => {
-      const result = await client.query<{ attempts: number }>(
-        `INSERT INTO oauth_login_attempts(bucket_start, source_hash, attempts)
-         VALUES (date_trunc('hour', clock_timestamp()),$1,1)
-         ON CONFLICT (bucket_start, source_hash)
-         DO UPDATE SET attempts=oauth_login_attempts.attempts + 1
-         RETURNING attempts`,
-        [key],
-      );
-      return result.rows[0].attempts;
-    };
-    const global = await increment("global");
-    const perIp = await increment(sourceHash);
-    if (global > limits.loginAttemptsGlobalPerHour || perIp > limits.loginAttemptsPerIpPerHour) {
-      throw new LoginRateLimitError("Too many login attempts");
-    }
+  const allowed = await reserveHourlyAttempt(pool, "login", source, {
+    perSource: limits.loginAttemptsPerIpPerHour,
+    global: limits.loginAttemptsGlobalPerHour,
   });
+  if (!allowed) throw new LoginRateLimitError("Too many login attempts");
 }

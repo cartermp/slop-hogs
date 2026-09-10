@@ -3,6 +3,8 @@ const limitCeilings = {
   accounts: 50,
   loginAttemptsPerIpPerHour: 5,
   loginAttemptsGlobalPerHour: 200,
+  actorSearchesPerIpPerHour: 60,
+  actorSearchesGlobalPerHour: 1_000,
   postLookupsPerAccountPerDay: 12,
   postLookupsGlobalPerHour: 100,
   giftsPerSenderPerDay: 3,
