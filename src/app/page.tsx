@@ -8,6 +8,7 @@ import { getAppSession } from "@/lib/server/hogs";
 const messages: Record<string, string> = {
   invalid_callback: "Bluesky could not verify that login. Please start again.",
   not_invited: "That Bluesky account is not on the private-alpha invite list.",
+  registration_closed: "New private-alpha registrations are temporarily closed.",
   account_limit: "The private alpha is full.",
   provider_logout: "You are signed out here, but Bluesky could not be reached to revoke the provider session.",
 };

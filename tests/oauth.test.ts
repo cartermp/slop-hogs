@@ -1,6 +1,6 @@
 import assert from "node:assert/strict";
 import { test } from "node:test";
-import { createClientMetadata, parseAppOrigin, parseEncryptionKey, parseInvitedDids } from "../src/lib/server/oauth-config.ts";
+import { createClientMetadata, parseAppOrigin, parseEncryptionKey, parseInvitedDids, parseOwnerDids } from "../src/lib/server/oauth-config.ts";
 import { loginSource } from "../src/lib/server/oauth.ts";
 
 test("OAuth metadata requests identity only and publishes exact HTTPS URLs", () => {
@@ -25,6 +25,8 @@ test("OAuth secrets, invites, and trusted proxy addresses are validated", () => 
     "did:web:example.com",
   ]);
   assert.throws(() => parseInvitedDids("alice.bsky.social"), /invalid DID/);
+  assert.deepEqual([...parseOwnerDids("did:plc:owner")], ["did:plc:owner"]);
+  assert.throws(() => parseOwnerDids("owner.bsky.social"), /invalid DID/);
 
   const request = new Request("https://hogs.example", { headers: { "x-forwarded-for": "spoofed, 203.0.113.8" } });
   assert.equal(loginSource(request, 1), "203.0.113.8");

@@ -69,6 +69,25 @@ h1 { font-size: clamp(2.8rem, 8vw, 5.6rem); line-height: .98; letter-spacing: -.
 .auth-error { color: #ffb1bc; }
 .pen code { overflow-wrap: anywhere; color: #ffc0d8; }
 
+.owner-page h1 { margin-bottom: 1rem; }
+.operations-warning {
+  margin: 1.5rem 0;
+  border: 1px solid #d79a42;
+  border-radius: .8rem;
+  padding: 1rem;
+  background: #3b2a17;
+  color: #ffe0a6;
+}
+.operations-grid { display: grid; grid-template-columns: repeat(2, minmax(0, 1fr)); gap: 1rem; margin-top: 2rem; }
+.operations-grid article { border: 1px solid #513543; border-radius: 1rem; padding: 1.25rem; background: #211920; }
+.operations-grid h2 { margin: 0 0 1rem; color: #ffc0d8; }
+.operations-grid dl { margin: 0; }
+.operations-grid dl div { display: flex; justify-content: space-between; gap: 1rem; padding: .55rem 0; border-top: 1px solid #3c2d36; }
+.operations-grid dt { color: #bba9b5; }
+.operations-grid dd { margin: 0; text-align: right; overflow-wrap: anywhere; }
+.operations-links { display: flex; gap: 1rem; margin-top: 1.5rem; }
+.operations-links a { color: #ff9ec3; font-weight: 700; text-underline-offset: .25rem; }
+
 .hog { display: block; width: 100%; height: auto; overflow: visible; }
 .hog-shadow { fill: rgb(4 2 4 / .35); }
 .hog-body { stroke: #7a3553; stroke-width: 5; }
@@ -146,6 +165,8 @@ h1 { font-size: clamp(2.8rem, 8vw, 5.6rem); line-height: .98; letter-spacing: -.
   .hog-card:first-child { grid-column: auto; display: block; }
   .hog-card:first-child .hog-stage { min-height: 19rem; }
   .login-form > div { align-items: stretch; flex-direction: column; }
+  .operations-grid { grid-template-columns: 1fr; }
+  .operations-links { align-items: flex-start; flex-direction: column; }
 }
 
 @media (prefers-reduced-motion: reduce) {

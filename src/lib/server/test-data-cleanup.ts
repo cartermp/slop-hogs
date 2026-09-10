@@ -23,7 +23,7 @@ interface CleanupCountRow {
   hog_actions: number;
 }
 
-const protectedDidPrefix = "did:plc:deploymentcheck";
+const protectedDidPrefixes = ["did:plc:deploymentcheck", "did:plc:backuprestorecheck"];
 
 export function parseCleanupArguments(args: string[]): CleanupArguments {
   const execute = args.includes("--execute");
@@ -34,8 +34,8 @@ export function parseCleanupArguments(args: string[]): CleanupArguments {
   if (!dids.length) throw new Error("Provide at least one test account DID");
   for (const did of dids) {
     if (!isValidDid(did)) throw new Error(`Invalid DID: ${did}`);
-    if (did.startsWith(protectedDidPrefix)) {
-      throw new Error(`Refusing to delete the retained persistence fixture: ${did}`);
+    if (protectedDidPrefixes.some(prefix => did.startsWith(prefix))) {
+      throw new Error(`Refusing to delete a retained operations fixture: ${did}`);
     }
   }
   return { dids, execute };
