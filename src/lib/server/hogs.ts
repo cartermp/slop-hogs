@@ -13,6 +13,7 @@ import {
 import { loadCostPolicy } from "./cost-policy.ts";
 import { transaction } from "./database.ts";
 import { isValidDid } from "./dids.ts";
+import { recordLifeEnding } from "./lifecycle.ts";
 import { ReadOnlyError, refreshOperationalStatusForPool, type OperationalPolicy } from "./operations.ts";
 
 const hash = (token: string) => createHash("sha256").update(token).digest("hex");
@@ -28,6 +29,11 @@ export class PostPreviewExpiredError extends Error {}
 async function ensureHog(client: PoolClient, verifiedDid: string): Promise<string> {
   const existing = await client.query("SELECT id FROM hog_lives WHERE owner_did=$1 AND ended_at IS NULL", [verifiedDid]);
   if (existing.rowCount) return existing.rows[0].id as string;
+  const latest = await client.query(
+    "SELECT id FROM hog_lives WHERE owner_did=$1 ORDER BY generation DESC LIMIT 1",
+    [verifiedDid],
+  );
+  if (latest.rowCount) return latest.rows[0].id as string;
   const id = randomUUID();
   const state = createGameState(Date.now(), randomBytes(4).readUInt32BE() || 1);
   await client.query("INSERT INTO hog_lives(id, owner_did, state) VALUES ($1,$2,$3)", [id, verifiedDid, state]);
@@ -61,21 +67,31 @@ export interface AppSession {
   hogId: string;
 }
 
+export interface AccountSession {
+  ownerDid: string;
+  hogId: string | null;
+}
+
 export interface HogView extends AppSession {
   state: GameState;
 }
 
-export async function getAppSession(pool: Pool, token: string): Promise<AppSession | null> {
+export async function getAccountSession(pool: Pool, token: string): Promise<AccountSession | null> {
   if (!sessionToken.test(token)) return null;
-  const result = await pool.query<{ owner_did: string; hog_id: string }>(
+  const result = await pool.query<{ owner_did: string; hog_id: string | null }>(
     `SELECT session.owner_did, hog.id AS hog_id
        FROM app_sessions session
-       JOIN hog_lives hog ON hog.owner_did=session.owner_did AND hog.ended_at IS NULL
+       LEFT JOIN hog_lives hog ON hog.owner_did=session.owner_did AND hog.ended_at IS NULL
       WHERE session.token_hash=$1 AND session.expires_at > clock_timestamp()`,
     [hash(token)],
   );
   if (!result.rowCount) return null;
   return { ownerDid: result.rows[0].owner_did, hogId: result.rows[0].hog_id };
+}
+
+export async function getAppSession(pool: Pool, token: string): Promise<AppSession | null> {
+  const session = await getAccountSession(pool, token);
+  return session?.hogId ? { ownerDid: session.ownerDid, hogId: session.hogId } : null;
 }
 
 export async function getHogView(pool: Pool, token: string): Promise<HogView | null> {
@@ -321,6 +337,7 @@ async function actOnHog(
        VALUES ($1,$2,$3,$4,$5,$6)`,
       [hogId, requestId, action, result, source?.uri ?? null, observedSourceCid],
     );
+    await recordLifeEnding(client, hogId, requestId, result);
     return result;
   });
   return result;

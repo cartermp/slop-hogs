@@ -109,9 +109,13 @@ export async function acceptGiftAction(
     const token = await requireSameOriginToken();
     const accepted = await acceptGift(getDatabase(), token, giftId, requestId);
     revalidatePath("/");
+    revalidatePath("/pen/[penId]", "page");
+    const ending = accepted.result.events.find(event => event.type === "life_ended");
     return {
       status: "success",
-      message: `Treat accepted. ${accepted.result.state.mealsAvailable} meals remain.`,
+      message: ending?.type === "life_ended"
+        ? `${ending.name}. ${ending.epitaph}`
+        : `Treat accepted. ${accepted.result.state.mealsAvailable} meals remain.`,
       requestId: randomUUID(),
     };
   } catch (error) {

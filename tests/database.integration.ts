@@ -71,6 +71,7 @@ test("real PostgreSQL persistence, retries, isolation and rollback", async () =>
       discoveries: _discoveries,
       equippedMutations: _equippedMutations,
       lastCleanedAtMs: _lastCleanedAtMs,
+      ending: _ending,
       ...legacyState
     } = createGameState(Date.now(), 77);
     await pool.query("INSERT INTO accounts(did) VALUES ($1)", [legacyDid]);
@@ -81,9 +82,10 @@ test("real PostgreSQL persistence, retries, isolation and rollback", async () =>
     await pool.query(
       await readFile(new URL("../migrations/005_mutations_and_care.sql", import.meta.url), "utf8"),
     );
-    const upgradedLegacy = parseGameState(
-      (await pool.query("SELECT state FROM hog_lives WHERE id=$1", [legacyHog])).rows[0].state,
-    );
+    const upgradedLegacy = (await pool.query(
+      "SELECT state FROM hog_lives WHERE id=$1",
+      [legacyHog],
+    )).rows[0].state;
     assert.equal(upgradedLegacy.rulesVersion, 2);
     assert.deepEqual(upgradedLegacy.recentMeals, []);
     assert.deepEqual(upgradedLegacy.discoveries, []);
