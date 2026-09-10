@@ -20,8 +20,14 @@ Set application variables:
 | NODE_ENV | `production` |
 | NEXT_TELEMETRY_DISABLED | `1` |
 | PORT | `3000` |
+| APP_ORIGIN | Exact generated HTTPS origin, with no trailing path |
+| OAUTH_PRIVATE_KEY | P-256 EC private key generated outside the repository |
+| OAUTH_ENCRYPTION_KEY | Base64-encoded 32-byte key generated outside the repository |
+| OAUTH_KEY_ID | Stable public key identifier, for example `slop-hogs-1` |
+| BLUESKY_INVITED_DIDS | Comma-separated invited account DIDs; empty means no new accounts |
+| TRUSTED_PROXY_COUNT | `1` for Railway's forwarding proxy |
 
-Use the private DATABASE_URL, not DATABASE_PUBLIC_URL. Do not add TEST_DATABASE_URL or paid AI keys. Do not attach a volume to the app. Its filesystem is disposable.
+Use the private DATABASE_URL, not DATABASE_PUBLIC_URL. Do not add TEST_DATABASE_URL or paid AI keys. Keep OAuth keys in Railway variables, never in `NEXT_PUBLIC_` variables or operating notes. Do not attach a volume to the app. Its filesystem is disposable.
 
 ## 3. Connect and deploy deliberately
 
@@ -70,4 +76,4 @@ For code-only regressions, select the previous successful image and verify it ag
 
 If the spending cutoff fires, inspect usage and stop the cause before resuming. Do not raise the cap automatically. Pausing the app does not remove database, volume, or backup charges.
 
-Before inviting players, complete SH-006b: daily backups, a demonstrated restore, database growth thresholds, and the remaining operational controls. OAuth will use this generated HTTPS origin in SH-005; a later domain change requires updating OAuth metadata and callbacks.
+Before inviting players, complete SH-006b: daily backups, a demonstrated restore, database growth thresholds, and the remaining operational controls. Verify login, denial, logout, and callback rejection on the generated HTTPS origin. A later domain change requires updating `APP_ORIGIN`, OAuth metadata, and callbacks together.

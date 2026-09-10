@@ -8,7 +8,7 @@ The owner assigns a bounded task; Codex implements it and returns a reviewable P
 | SH-002 | Pure deterministic feeding engine | SH-001 | Complete |
 | SH-003 | Base SVG hog and five diet appearances | SH-002 | Complete |
 | SH-004 | Postgres schema and atomic persistence | SH-002 | Complete |
-| SH-005 | Minimal-scope Bluesky OAuth | SH-004 | Planned |
+| SH-005 | Minimal-scope Bluesky OAuth | SH-004 | Complete |
 | SH-006a | Railway image, manual deployment, budgets and restart checks | SH-004 | Repo setup on this branch; live setup pending |
 | SH-006b | Backup restore and remaining launch controls | SH-005, SH-006a | Required before inviting players |
 | SH-007 | Canonical post previews and feeding quotas | SH-004, SH-005 | Planned |
@@ -20,7 +20,7 @@ The owner assigns a bounded task; Codex implements it and returns a reviewable P
 
 ## Current handoff
 
-SH-006a prepares the Railway deployment ahead of OAuth. See [Railway setup](railway.md). CI builds the production image, runs its migrations and startup against PostgreSQL, and checks an app-container restart. Live resources, spending controls, HTTPS, database restart, and backup restoration are not yet verified.
+SH-005 adds identity-only Bluesky OAuth, encrypted durable provider state, invite-gated account creation, login quotas, and opaque revocable application cookies. SH-006a prepared Railway deployment ahead of OAuth. Live OAuth configuration, spending controls, HTTPS login, database restart, and backup restoration are not yet verified.
 
 Run `npm ci`, `npm run check`, `npm run build`, and `npm run smoke` to reproduce automated validation. Run `npm run dev`, then open `/gallery` to compare the five appearances at desktop and phone widths.
 

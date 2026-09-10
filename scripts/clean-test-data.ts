@@ -11,6 +11,7 @@ function describeCounts(counts: CleanupCounts): string {
     `${counts.accounts} account(s)`,
     `${counts.hogLives} hog life/lives`,
     `${counts.appSessions} session(s)`,
+    `${counts.oauthSessions} OAuth session(s)`,
     `${counts.hogActions} action receipt(s)`,
   ].join(", ");
 }

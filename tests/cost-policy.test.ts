@@ -8,9 +8,10 @@ import { parseCostPolicy } from "../src/lib/cost-policy.ts";
 
 const fixture = () => JSON.parse(readFileSync(new URL("../config/cost-policy.json", import.meta.url), "utf8"));
 
-test("committed policy closes every unfinished feature and paid AI", () => {
+test("committed policy enables only enforced registration and keeps paid AI closed", () => {
   const policy = parseCostPolicy(fixture());
-  assert.ok(Object.values(policy.features).every(value => value === false));
+  assert.equal(policy.features.registrations, true);
+  assert.ok(Object.entries(policy.features).filter(([name]) => name !== "registrations").every(([, value]) => value === false));
   assert.equal(policy.paidAiMonthlyBudgetCents, 0);
   assert.equal(policy.railway.computeHardLimitCents, 3_000);
 });
@@ -26,9 +27,14 @@ test("every quota rejects zero, negative, fractional, nonnumeric and excessive v
   }
 });
 
-test("every unfinished feature rejects true, string booleans, null and omission", () => {
+test("unfinished features reject true and every feature rejects invalid booleans", () => {
+  for (const key of Object.keys(fixture().features).filter(key => key !== "registrations")) {
+    const enabled = fixture();
+    enabled.features[key] = true;
+    assert.throws(() => parseCostPolicy(enabled), /must remain false/);
+  }
   for (const key of Object.keys(fixture().features)) {
-    for (const value of [true, "false", "true", null, undefined]) {
+    for (const value of ["false", "true", null, undefined]) {
       const input = fixture();
       input.features[key] = value;
       assert.throws(() => parseCostPolicy(input));
@@ -74,6 +80,8 @@ test("lower finite limits are allowed without enabling features", () => {
   input.limits.accounts = 10;
   input.railway = { usageAlertCents: 500, computeHardLimitCents: 1_000 };
   assert.equal(parseCostPolicy(input).limits.accounts, 10);
+  input.features.registrations = false;
+  assert.equal(parseCostPolicy(input).features.registrations, false);
 });
 
 test("startup check exits nonzero for missing, malformed, or unsafe files", () => {

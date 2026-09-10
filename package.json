@@ -26,6 +26,7 @@
     "smoke:deployed": "node scripts/smoke-deployed.ts"
   },
   "dependencies": {
+    "@atproto/oauth-client-node": "0.5.4",
     "next": "16.3.4",
     "pg": "8.23.0",
     "react": "19.2.8",
