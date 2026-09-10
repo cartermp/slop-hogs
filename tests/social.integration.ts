@@ -48,7 +48,9 @@ test("public pens keep visitor gifts bounded and owner-controlled", async () => 
     const [ownerHog, , , , otherOwnerHog] = hogIds;
     const [ownerToken, senderToken, secondSenderToken, thirdSenderToken, otherOwnerToken] = tokens;
     const management = await getPenManagement(pool, ownerToken);
+    const otherManagement = await getPenManagement(pool, otherOwnerToken);
     assert.ok(management);
+    assert.ok(otherManagement);
     assert.equal(management.isPublic, true);
     assert.equal(management.giftsEnabled, true);
     assert.deepEqual(management.pendingGifts, []);
@@ -92,6 +94,14 @@ test("public pens keep visitor gifts bounded and owner-controlled", async () => 
     await assert.rejects(
       acceptGift(pool, ownerToken, giftId, randomUUID(), operationalPolicy),
       GiftStateError,
+    );
+    await assert.rejects(
+      sendGift(pool, senderToken, otherManagement.penId, randomUUID(), "shitpost", {
+        ...socialPolicy,
+        limits: { ...socialPolicy.limits, giftsPerSenderPerDay: 1 },
+      }),
+      GiftLimitError,
+      "the sender allowance applies across recipient pens",
     );
 
     const blockedGiftId = randomUUID();
@@ -137,8 +147,6 @@ test("public pens keep visitor gifts bounded and owner-controlled", async () => 
     );
     await setPenSetting(pool, ownerToken, "pen_public", true, operationalPolicy);
 
-    const otherManagement = await getPenManagement(pool, otherOwnerToken);
-    assert.ok(otherManagement);
     const recipientLimitedPolicy = {
       ...socialPolicy,
       limits: { ...socialPolicy.limits, giftsPerRecipientPerDay: 1 },

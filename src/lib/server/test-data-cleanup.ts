@@ -8,6 +8,9 @@ export interface CleanupCounts {
   appSessions: number;
   oauthSessions: number;
   hogActions: number;
+  giftTreats: number;
+  accountBlocks: number;
+  giftQuotaRows: number;
 }
 
 export interface CleanupArguments {
@@ -21,6 +24,9 @@ interface CleanupCountRow {
   app_sessions: number;
   oauth_sessions: number;
   hog_actions: number;
+  gift_treats: number;
+  account_blocks: number;
+  gift_quota_rows: number;
 }
 
 const protectedDidPrefixes = ["did:plc:deploymentcheck", "did:plc:backuprestorecheck"];
@@ -49,7 +55,15 @@ export async function previewTestDataCleanup(pool: Pool, dids: string[]): Promis
       (SELECT count(*)::integer FROM app_sessions WHERE owner_did=ANY($1::text[])) AS app_sessions,
       (SELECT count(*)::integer FROM oauth_sessions WHERE did=ANY($1::text[])) AS oauth_sessions,
       (SELECT count(*)::integer FROM hog_actions
-        WHERE hog_id IN (SELECT id FROM hog_lives WHERE owner_did=ANY($1::text[]))) AS hog_actions
+        WHERE hog_id IN (SELECT id FROM hog_lives WHERE owner_did=ANY($1::text[]))) AS hog_actions,
+      (SELECT count(*)::integer FROM gift_treats
+        WHERE sender_did=ANY($1::text[]) OR recipient_did=ANY($1::text[])) AS gift_treats,
+      (SELECT count(*)::integer FROM account_blocks
+        WHERE owner_did=ANY($1::text[]) OR blocked_did=ANY($1::text[])) AS account_blocks,
+      (
+        (SELECT count(*) FROM gift_sender_daily WHERE sender_did=ANY($1::text[]))
+        + (SELECT count(*) FROM gift_recipient_daily WHERE recipient_did=ANY($1::text[]))
+      )::integer AS gift_quota_rows
   `, [dids]);
   const row = result.rows[0];
   return {
@@ -58,6 +72,9 @@ export async function previewTestDataCleanup(pool: Pool, dids: string[]): Promis
     appSessions: row.app_sessions,
     oauthSessions: row.oauth_sessions,
     hogActions: row.hog_actions,
+    giftTreats: row.gift_treats,
+    accountBlocks: row.account_blocks,
+    giftQuotaRows: row.gift_quota_rows,
   };
 }
 
@@ -69,6 +86,22 @@ export async function deleteTestData(pool: Pool, dids: string[]): Promise<Cleanu
     );
     await client.query(
       "SELECT id FROM hog_lives WHERE owner_did=ANY($1::text[]) ORDER BY id FOR UPDATE",
+      [dids],
+    );
+    const giftTreats = await client.query(
+      "DELETE FROM gift_treats WHERE sender_did=ANY($1::text[]) OR recipient_did=ANY($1::text[])",
+      [dids],
+    );
+    const accountBlocks = await client.query(
+      "DELETE FROM account_blocks WHERE owner_did=ANY($1::text[]) OR blocked_did=ANY($1::text[])",
+      [dids],
+    );
+    const senderQuota = await client.query(
+      "DELETE FROM gift_sender_daily WHERE sender_did=ANY($1::text[])",
+      [dids],
+    );
+    const recipientQuota = await client.query(
+      "DELETE FROM gift_recipient_daily WHERE recipient_did=ANY($1::text[])",
       [dids],
     );
     const hogActions = await client.query(
@@ -97,6 +130,9 @@ export async function deleteTestData(pool: Pool, dids: string[]): Promise<Cleanu
       appSessions: appSessions.rowCount ?? 0,
       oauthSessions: oauthSessions.rowCount ?? 0,
       hogActions: hogActions.rowCount ?? 0,
+      giftTreats: giftTreats.rowCount ?? 0,
+      accountBlocks: accountBlocks.rowCount ?? 0,
+      giftQuotaRows: (senderQuota.rowCount ?? 0) + (recipientQuota.rowCount ?? 0),
     };
   });
 }
