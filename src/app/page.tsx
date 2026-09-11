@@ -45,7 +45,6 @@ export default async function Home({
         <div className="terminal-auth">
           <LoginForm />
         </div>
-        <div className="blink-prompt">SIGN IN TO INSERT HOG</div>
       </section>
     </main>
   );

@@ -12,10 +12,10 @@ for (const [path, status] of [["/api/health", 200], ["/", 200], ["/gallery", 404
   } else if (path === "/") {
     const html = await response.text();
     assert.match(html, /SLOP SYSTEMS PRESENTS/);
-    assert.match(html, /SIGN IN TO INSERT HOG/);
+    assert.match(html, /Sign in with Bluesky/);
     assert.doesNotMatch(html, /SLOP SYSTEMS PRESENTS \/\/ \d{4}/);
     assert.doesNotMatch(html, /ROAM THE COMMUNAL FARM|EAT UNVERIFIED AI SLOP|GET BIG\. POP SPECTACULARLY/);
-    assert.doesNotMatch(html, /IDENTITY BY BLUESKY|PRESS SIGN IN TO INSERT HOG/);
+    assert.doesNotMatch(html, /IDENTITY BY BLUESKY|INSERT HOG/);
   }
 }
 console.log("Deployed shell, health endpoint, gallery restriction and anonymous owner denial passed.");

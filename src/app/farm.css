@@ -609,8 +609,6 @@
 }
 .terminal-auth .login-form { max-width: 580px; margin: 0 auto; text-align: left; }
 .terminal-auth .login-row {
-  display: grid;
-  grid-template-columns: repeat(2, minmax(0, 1fr));
   align-items: stretch;
   gap: 10px;
 }
@@ -668,7 +666,8 @@
   .controls-copy { display: none; }
   .d-pad { display: grid; }
   .game-message { font-size: 16px; }
-  .terminal-auth .login-row { grid-template-columns: 1fr; }
+  .terminal-auth .login-row { align-items: flex-start; }
+  .terminal-auth .handle-combobox { width: 100%; }
   .slop-legend { grid-template-columns: 1fr; }
   .slop-legend > div { grid-column: auto; }
   .pop-overlay { position: fixed; }
