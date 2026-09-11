@@ -42,14 +42,26 @@ test("the shared farm persists players, claims slop once, pops, and restarts", a
 
     await pool.query(
       `UPDATE farm_players
-          SET mass=40, psychosis_updated_at=to_timestamp($2 / 1000.0)
+          SET x=400, y=300, mass=40, psychosis_movement_ms=0,
+              last_moved_at=to_timestamp($2 / 1000.0)
         WHERE owner_did=$1`,
       [dids[0], now],
     );
     now += 4_000;
     assert.equal(
       (await syncFarm(pool, dids[0], now)).players.find(player => player.isYou)?.mass,
-      38,
+      40,
+      "idle hogs retain psychosis",
+    );
+    await pool.query("DELETE FROM farm_slop");
+    for (let index = 0; index < 9; index += 1) {
+      now += 240;
+      await actOnFarm(pool, dids[0], { type: "move", dx: 1, dy: 0 }, now);
+    }
+    assert.equal(
+      (await syncFarm(pool, dids[0], now)).players.find(player => player.isYou)?.mass,
+      39,
+      "psychosis decays after enough movement",
     );
 
     await pool.query("DELETE FROM farm_slop");
