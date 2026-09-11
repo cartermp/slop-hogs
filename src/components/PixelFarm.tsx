@@ -1,17 +1,20 @@
 "use client";
 
-import { useCallback, useEffect, useRef, useState } from "react";
+import { useCallback, useEffect, useMemo, useRef, useState } from "react";
 import { AchievementCabinet } from "@/components/AchievementCabinet";
 import { FeedbackLinks } from "@/components/FeedbackLinks";
 import { ACHIEVEMENT_BY_ID } from "@/lib/achievements";
 import {
   FARM_HEIGHT,
   FARM_WIDTH,
+  MAX_HEALTH,
   POPPING_MASS,
   SLOP_CATALOG,
   STARTING_MASS,
+  battleRange,
   hogDiameter,
   psychosisLevel,
+  type BattleMove,
   type FarmAction,
   type FarmActionResult,
   type FarmEvent,
@@ -43,35 +46,46 @@ function isFarmResult(value: unknown): value is FarmActionResult {
     && Boolean(snapshot.achievements);
 }
 
-function PixelHog({ player }: { player: FarmPlayer }) {
+function PixelHog({
+  player,
+  targeted,
+  onTarget,
+}: {
+  player: FarmPlayer;
+  targeted: boolean;
+  onTarget?: () => void;
+}) {
   const diameter = hogDiameter(player.mass);
   const effectLabel = Object.values(SLOP_CATALOG)
     .find(definition => definition.effect === player.effect)?.effectLabel;
-  if (player.status === "popped") {
+  if (player.status !== "alive") {
+    const defeated = player.status === "defeated";
     return (
-      <div className="farm-player popped-player" style={{
+      <div className={`farm-player ${defeated ? "defeated-player" : "popped-player"}`} style={{
         left: `${player.x / FARM_WIDTH * 100}%`,
         top: `${player.y / FARM_HEIGHT * 100}%`,
         zIndex: Math.round(player.y),
       }}>
         <span className="player-name">{player.name}{player.isYou ? " (YOU)" : ""}</span>
-        <div className="pixel-pop" aria-label={`${player.name} popped`}>
-          <i /><i /><i /><i /><b>POP!</b>
+        <div className="pixel-pop" aria-label={`${player.name} ${defeated ? "was defeated" : "popped"}`}>
+          <i /><i /><i /><i /><b>{defeated ? "KO!" : "POP!"}</b>
         </div>
       </div>
     );
   }
-  return (
-    <div
-      className={`farm-player${player.isYou ? " current-player" : ""}${player.effect ? ` effect-${player.effect}` : ""}`}
-      style={{
-        left: `${player.x / FARM_WIDTH * 100}%`,
-        top: `${player.y / FARM_HEIGHT * 100}%`,
-        zIndex: Math.round(player.y),
-        width: diameter,
-        height: diameter * 0.72,
-      }}
-    >
+  const className = `farm-player${player.isYou ? " current-player" : ""}${targeted ? " targeted-player" : ""}${player.effect ? ` effect-${player.effect}` : ""}`;
+  const style = {
+    left: `${player.x / FARM_WIDTH * 100}%`,
+    top: `${player.y / FARM_HEIGHT * 100}%`,
+    zIndex: Math.round(player.y),
+    width: diameter,
+    height: diameter * 0.72,
+  };
+  const hog = (
+    <>
+      <span className="hog-health" aria-label={`${player.health} health`}>
+        <i style={{ width: `${player.health / MAX_HEALTH * 100}%` }} />
+      </span>
       <span className="player-name">{player.name}{player.isYou ? " (YOU)" : ""}</span>
       {effectLabel && <span className="effect-bubble">{effectLabel}</span>}
       <div className={`pixel-hog facing-${player.facing}`}>
@@ -83,6 +97,25 @@ function PixelHog({ player }: { player: FarmPlayer }) {
         <i className="hog-leg-pixel leg-one" />
         <i className="hog-leg-pixel leg-two" />
       </div>
+    </>
+  );
+  if (onTarget) {
+    return (
+      <button
+        type="button"
+        className={`${className} targetable-player`}
+        style={style}
+        aria-label={`Target ${player.name}`}
+        aria-pressed={targeted}
+        onClick={onTarget}
+      >
+        {hog}
+      </button>
+    );
+  }
+  return (
+    <div className={className} style={style}>
+      {hog}
     </div>
   );
 }
@@ -90,6 +123,15 @@ function PixelHog({ player }: { player: FarmPlayer }) {
 function eventMessage(event: FarmEvent): string {
   if (event.type === "slop_eaten") {
     return `${SLOP_CATALOG[event.kind].label}: +${event.massGained} mass / +${event.pointsGained} points`;
+  }
+  if (event.type === "battle_attack") {
+    const psychosis = event.psychosisDelta > 0
+      ? `+${event.psychosisDelta} psychosis`
+      : `${Math.abs(event.psychosisDelta)} psychosis released`;
+    return `${event.move.toUpperCase()} hit ${event.targetName} for ${event.damage}. ${psychosis}.${event.targetDefeated ? " KNOCKOUT!" : ` ${event.targetHealth} HP left.`}`;
+  }
+  if (event.type === "psychosis_released") {
+    return `FART released ${event.amount} psychosis. No target required.`;
   }
   if (event.type === "achievements_unlocked") {
     const names = event.achievementIds
@@ -99,14 +141,15 @@ function eventMessage(event: FarmEvent): string {
       ? `ACHIEVEMENT UNLOCKED: ${names[0]}`
       : `${names.length} ACHIEVEMENTS UNLOCKED: ${names.join(" / ")}`;
   }
-  if (event.type === "restarted") return "Fresh hog deployed. Resume slopping.";
+  if (event.type === "restarted") return "Fresh hog deployed. Resume battle.";
   return "CRITICAL MASS REACHED";
 }
 
 export function PixelFarm() {
   const [snapshot, setSnapshot] = useState<FarmSnapshot | null>(null);
-  const [notice, setNotice] = useState("Connecting to the communal trough...");
+  const [notice, setNotice] = useState("Select a hog, close the gap, then Bite or Fart.");
   const [error, setError] = useState<string | null>(null);
+  const [targetId, setTargetId] = useState<string | null>(null);
   const keys = useRef(new Set<Direction>());
   const requestInFlight = useRef(false);
   const latestServerTime = useRef(0);
@@ -119,7 +162,7 @@ export function PixelFarm() {
     if (showEvents && result.events.length) {
       setNotice(eventMessage(result.events.at(-1)!));
     }
-    if (result.snapshot.players.find(player => player.isYou)?.status === "popped") {
+    if (result.snapshot.players.find(player => player.isYou)?.status !== "alive") {
       keys.current.clear();
     }
     setError(null);
@@ -196,7 +239,33 @@ export function PixelFarm() {
   }, [requestFarm]);
 
   const ownHog = snapshot?.players.find(player => player.isYou) ?? null;
+  const opponents = useMemo(
+    () => snapshot?.players.filter(player => !player.isYou && player.status === "alive") ?? [],
+    [snapshot],
+  );
+  const selectedTarget = opponents.find(player => player.id === targetId)
+    ?? (ownHog ? opponents.reduce<FarmPlayer | null>((nearest, player) => {
+      if (!nearest) return player;
+      const distance = Math.hypot(player.x - ownHog.x, player.y - ownHog.y);
+      const nearestDistance = Math.hypot(nearest.x - ownHog.x, nearest.y - ownHog.y);
+      return distance < nearestDistance ? player : nearest;
+    }, null) : null);
   const massPercent = ownHog ? psychosisLevel(ownHog.mass) * 100 : 0;
+  const targetDistance = ownHog && selectedTarget
+    ? Math.hypot(selectedTarget.x - ownHog.x, selectedTarget.y - ownHog.y)
+    : Infinity;
+  const canBite = Boolean(
+    ownHog
+    && selectedTarget
+    && ownHog.status === "alive"
+    && targetDistance <= battleRange("bite", ownHog, selectedTarget),
+  );
+  const canFartHit = Boolean(
+    ownHog
+    && selectedTarget
+    && ownHog.status === "alive"
+    && targetDistance <= battleRange("fart", ownHog, selectedTarget),
+  );
 
   function setPad(direction: Direction, pressed: boolean) {
     if (pressed) keys.current.add(direction);
@@ -216,11 +285,34 @@ export function PixelFarm() {
     }
   }
 
+  async function attack(move: BattleMove) {
+    if (requestInFlight.current || !ownHog || ownHog.status !== "alive") return;
+    const target = selectedTarget;
+    let action: FarmAction;
+    if (move === "bite") {
+      if (!canBite || !target) return;
+      action = { type: "bite", targetId: target.id };
+    } else {
+      action = canFartHit && target
+        ? { type: "fart", targetId: target.id }
+        : { type: "fart" };
+    }
+    requestInFlight.current = true;
+    keys.current.clear();
+    try {
+      await requestFarm(action);
+    } catch (failure) {
+      setError(failure instanceof Error ? failure.message : "Attack failed");
+    } finally {
+      requestInFlight.current = false;
+    }
+  }
+
   return (
     <main className="game-shell">
       <header className="game-header">
         <div>
-          <p className="pixel-kicker">ONLINE // SHARED FARM 01</p>
+          <p className="pixel-kicker">ONLINE // BATTLE FARM 01</p>
           <h1>SLOP<br /><span>HOGS</span></h1>
         </div>
         <div className="game-status">
@@ -232,11 +324,16 @@ export function PixelFarm() {
         </div>
       </header>
 
-      <section className="game-console" aria-label="Slop Hogs multiplayer farm">
+      <section className="game-console" aria-label="Slop Hogs multiplayer battle">
         <div className="hud">
           <div className="hud-stat"><small>HOG</small><strong>{ownHog?.name ?? "LOADING..."}</strong></div>
-          <div className="hud-stat"><small>SLOP EATEN</small><strong>{ownHog?.slopEaten ?? 0}</strong></div>
+          <div className="hud-stat"><small>KNOCKOUTS</small><strong>{ownHog?.knockouts ?? 0}</strong></div>
           <div className="hud-stat"><small>SCORE</small><strong>{String(ownHog?.score ?? 0).padStart(6, "0")}</strong></div>
+          <div className="health-meter">
+            <small>HEALTH</small>
+            <div><i style={{ width: `${ownHog?.health ?? MAX_HEALTH}%` }} /></div>
+            <strong>{ownHog?.health ?? MAX_HEALTH}</strong>
+          </div>
           <div className="mass-meter">
             <small>PSYCHOSIS</small>
             <div><i style={{ width: `${massPercent}%` }} /></div>
@@ -268,16 +365,29 @@ export function PixelFarm() {
                 <i>{SLOP_CATALOG[item.kind].shortLabel}</i>
               </div>
             ))}
-            {snapshot?.players.map(player => <PixelHog key={player.id} player={player} />)}
+            {snapshot?.players.map(player => (
+              <PixelHog
+                key={player.id}
+                player={player}
+                targeted={player.id === selectedTarget?.id}
+                onTarget={!player.isYou && player.status === "alive"
+                  ? () => setTargetId(player.id)
+                  : undefined}
+              />
+            ))}
 
             {!snapshot && <div className="farm-loading">DIALING THE SLOP MAINFRAME...</div>}
-            {ownHog?.status === "popped" && (
+            {ownHog && ownHog.status !== "alive" && (
               <div className="pop-overlay" role="dialog" aria-modal="true" aria-labelledby="pop-title">
                 <p>!!! SYSTEM FAILURE !!!</p>
-                <h2 id="pop-title">SLOP HOG POPPPED<br />DUE TO AI PSYCHOSIS</h2>
+                <h2 id="pop-title">
+                  {ownHog.status === "popped"
+                    ? <>SLOP HOG POPPED<br />DUE TO AI PSYCHOSIS</>
+                    : <>SLOP HOG DEFEATED<br />IN BATTLE</>}
+                </h2>
                 <div>
                   FINAL SCORE: {String(ownHog.score).padStart(6, "0")}<br />
-                  SLOP CONSUMED: {ownHog.slopEaten}
+                  KNOCKOUTS: {ownHog.knockouts}
                 </div>
                 <button type="button" onClick={restart} disabled={requestInFlight.current}>
                   [ DEPLOY FRESH HOG ]
@@ -289,7 +399,26 @@ export function PixelFarm() {
 
         <div className="console-footer">
           <div className="game-message" aria-live="polite">
-            <span>FARM FEED:</span> {error ? `ERROR: ${error}` : notice}
+            <span>BATTLE FEED:</span> {error ? `ERROR: ${error}` : notice}
+          </div>
+          <div className="battle-controls" aria-label="Battle controls">
+            <span>TARGET: {selectedTarget?.name ?? "NO HOG"}</span>
+            <button
+              type="button"
+              title="Heavy hit; adds 7 psychosis"
+              onClick={() => attack("bite")}
+              disabled={!canBite || requestInFlight.current}
+            >
+              [ BITE +7 PSI ]
+            </button>
+            <button
+              type="button"
+              title="Always releases up to 10 psychosis; also hits a target in range"
+              onClick={() => attack("fart")}
+              disabled={!ownHog || ownHog.status !== "alive" || requestInFlight.current}
+            >
+              [ FART -10 PSI ]
+            </button>
           </div>
           <div className="controls-copy">
             <span>MOVE</span> WASD / ARROW KEYS
@@ -342,7 +471,10 @@ export function PixelFarm() {
         {Object.entries(SLOP_CATALOG).map(([kind, item]) => (
           <article key={kind}>
             <i className={`legend-sprite slop-${kind}`}>{item.shortLabel}</i>
-            <div><strong>{item.label}</strong><span>{item.description} +{item.mass} mass</span></div>
+            <div>
+              <strong>{item.label}</strong>
+              <span>{item.description} +{item.mass} psychosis. {item.battleBonus}.</span>
+            </div>
           </article>
         ))}
       </section>

@@ -101,12 +101,13 @@
 
 .hud {
   display: grid;
-  grid-template-columns: 1fr .8fr 1fr 2fr;
+  grid-template-columns: 1fr .7fr .9fr 1.3fr 1.8fr;
   border-bottom: 5px solid #151019;
   background: #342333;
 }
 
 .hud-stat,
+.health-meter,
 .mass-meter {
   min-width: 0;
   border-right: 3px solid #151019;
@@ -125,8 +126,14 @@
   display: grid;
   grid-template-columns: 1fr auto;
 }
-.mass-meter small { grid-column: 1 / -1; }
-.mass-meter > div {
+.health-meter {
+  display: grid;
+  grid-template-columns: 1fr auto;
+}
+.mass-meter small,
+.health-meter small { grid-column: 1 / -1; }
+.mass-meter > div,
+.health-meter > div {
   align-self: center;
   height: 15px;
   margin-right: 12px;
@@ -138,6 +145,12 @@
   height: 100%;
   background: linear-gradient(90deg, #6fe151 0 55%, #ffd44a 75%, #ff3c70);
   transition: width .25s steps(5);
+}
+.health-meter > div i {
+  display: block;
+  height: 100%;
+  background: linear-gradient(90deg, #ff3c70, #ffd44a 35%, #74e35a);
+  transition: width .2s steps(5);
 }
 
 .farm-viewport {
@@ -314,6 +327,36 @@
   pointer-events: none;
 }
 
+.targetable-player {
+  border: 0;
+  padding: 0;
+  background: transparent;
+  color: inherit;
+  cursor: crosshair;
+  pointer-events: auto;
+}
+.targeted-player::after {
+  position: absolute;
+  inset: -12px;
+  border: 3px dashed #fff06a;
+  content: "";
+  animation: target-lock .5s steps(2) infinite;
+}
+.hog-health {
+  position: absolute;
+  z-index: 4;
+  left: 8%;
+  bottom: calc(100% + 1px);
+  width: 84%;
+  height: 6px;
+  border: 2px solid #1b1119;
+  background: #1b1119;
+}
+.hog-health i {
+  display: block;
+  height: 100%;
+  background: #7ef35f;
+}
 .player-name {
   position: absolute;
   z-index: 4;
@@ -535,7 +578,7 @@
 
 .console-footer {
   display: grid;
-  grid-template-columns: 1fr auto auto;
+  grid-template-columns: 1fr auto auto auto;
   align-items: center;
   gap: 20px;
   min-height: 58px;
@@ -548,6 +591,33 @@
 .game-message span,
 .controls-copy span { color: #ee769b; }
 .controls-copy { white-space: nowrap; }
+.battle-controls {
+  display: flex;
+  align-items: center;
+  gap: 7px;
+  white-space: nowrap;
+}
+.battle-controls span {
+  max-width: 150px;
+  overflow: hidden;
+  color: #ffe68b;
+  text-overflow: ellipsis;
+}
+.battle-controls button {
+  border: 2px solid #130e14;
+  padding: 7px 9px;
+  background: #ff5b8b;
+  color: #241623;
+  font: 7px var(--pixel);
+  box-shadow: 3px 3px 0 #171117;
+  cursor: pointer;
+}
+.battle-controls button:last-child { background: #9fe961; }
+.battle-controls button:disabled {
+  filter: grayscale(1);
+  cursor: not-allowed;
+  opacity: .45;
+}
 .d-pad { display: none; grid-template-columns: repeat(3, 34px); grid-template-rows: repeat(2, 30px); }
 .d-pad button {
   border: 2px solid #130e14;
@@ -805,13 +875,16 @@
 @keyframes loading-blink { 50% { opacity: .35; } }
 @keyframes overlay-in { from { opacity: 0; transform: scale(1.3); } }
 @keyframes warning-border { 50% { border-color: #ffe058; } }
+@keyframes target-lock { 50% { border-color: #ff5b8b; } }
 @keyframes title-hog { 50% { transform: translateY(-5px); } }
 
 @media (max-width: 950px) {
   .slop-legend { grid-template-columns: repeat(2, 1fr); }
   .slop-legend > div { grid-column: 1 / -1; }
   .hud { grid-template-columns: repeat(3, 1fr); }
-  .mass-meter { grid-column: 1 / -1; border-top: 3px solid #151019; }
+  .health-meter,
+  .mass-meter { border-top: 3px solid #151019; }
+  .mass-meter { grid-column: span 2; }
   .pigsty b, .mud-pen b { display: none; }
 }
 
@@ -826,6 +899,8 @@
   .farm-viewport { overflow-x: auto; }
   .farm-world { width: 820px; }
   .console-footer { grid-template-columns: 1fr auto; gap: 8px; }
+  .battle-controls { grid-column: 1 / -1; justify-content: space-between; }
+  .battle-controls span { max-width: none; }
   .controls-copy { display: none; }
   .d-pad { display: grid; }
   .game-message { font-size: 16px; }

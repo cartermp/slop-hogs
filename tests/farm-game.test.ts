@@ -3,14 +3,17 @@ import { test } from "node:test";
 import {
   FARM_HEIGHT,
   FARM_WIDTH,
+  MAX_HEALTH,
   POPPING_MASS,
   SLOP_CATALOG,
   applySlop,
   decayPsychosis,
   hogDiameter,
+  battleRange,
   movePlayer,
   parseFarmAction,
   psychosisLevel,
+  resolveBattleAttack,
   touchingSlop,
   type FarmPlayer,
 } from "../src/lib/farm-game.ts";
@@ -27,6 +30,8 @@ function player(overrides: Partial<FarmPlayer> = {}): FarmPlayer {
     mass: 24,
     score: 0,
     slopEaten: 0,
+    health: MAX_HEALTH,
+    knockouts: 0,
     status: "alive",
     effect: null,
     effectExpiresAtMs: null,
@@ -38,6 +43,15 @@ function player(overrides: Partial<FarmPlayer> = {}): FarmPlayer {
 
 test("farm actions accept only bounded directional input and restart", () => {
   assert.deepEqual(parseFarmAction({ type: "move", dx: -1, dy: 1 }), { type: "move", dx: -1, dy: 1 });
+  assert.deepEqual(
+    parseFarmAction({ type: "bite", targetId: "8f22dca7-6df0-4a8c-aee6-60bc86b4866c" }),
+    { type: "bite", targetId: "8f22dca7-6df0-4a8c-aee6-60bc86b4866c" },
+  );
+  assert.deepEqual(parseFarmAction({ type: "fart" }), { type: "fart" });
+  assert.deepEqual(
+    parseFarmAction({ type: "fart", targetId: "8f22dca7-6df0-4a8c-aee6-60bc86b4866c" }),
+    { type: "fart", targetId: "8f22dca7-6df0-4a8c-aee6-60bc86b4866c" },
+  );
   assert.deepEqual(parseFarmAction({ type: "restart" }), { type: "restart" });
   for (const action of [
     null,
@@ -45,6 +59,9 @@ test("farm actions accept only bounded directional input and restart", () => {
     { type: "move", dx: 2, dy: 0 },
     { type: "move", dx: 0, dy: 0 },
     { type: "move", dx: 1, dy: 0, x: 500 },
+    { type: "bite" },
+    { type: "fart", targetId: "not-a-player" },
+    { type: "bite", targetId: "8f22dca7-6df0-4a8c-aee6-60bc86b4866c", damage: 99 },
     { type: "restart", now: NOW },
   ]) assert.throws(() => parseFarmAction(action), /Invalid farm action/);
 });
@@ -134,4 +151,51 @@ test("every slop kind has a distinct effect and enough mass pops the hog exactly
   assert.deepEqual(result.events.map(event => event.type), ["slop_eaten", "popped"]);
   assert.equal(result.events[0].type === "slop_eaten" && result.events[0].massGained, 10);
   assert.deepEqual(applySlop(result.player, "premium_tokens", NOW), { player: result.player, events: [] });
+});
+
+test("bite hits harder at the cost of psychosis while fart releases it", () => {
+  const attacker = { mass: 60, health: 100, status: "alive" as const, effect: null };
+  const target = { mass: 24, health: 100, status: "alive" as const, effect: null };
+  const bite = resolveBattleAttack(attacker, target, "bite");
+  const fart = resolveBattleAttack(attacker, target, "fart");
+  assert.ok(bite.damage > fart.damage);
+  assert.equal(bite.psychosisDelta, 7);
+  assert.equal(fart.psychosisDelta, -10);
+  assert.equal(bite.target.health, 100 - bite.damage);
+  assert.equal(fart.target.health, 100 - fart.damage);
+});
+
+test("slop effects grant distinct battle bonuses", () => {
+  const base = { mass: 48, health: 100, status: "alive" as const, effect: null };
+  const target = { ...base };
+  const bite = resolveBattleAttack(base, target, "bite");
+  const fart = resolveBattleAttack(base, target, "fart");
+  assert.equal(resolveBattleAttack({ ...base, effect: "collapsed" }, target, "bite").damage, bite.damage + 7);
+  assert.equal(resolveBattleAttack({ ...base, effect: "recursive" }, target, "fart").damage, fart.damage + 6);
+  assert.equal(resolveBattleAttack({ ...base, effect: "premium" }, target, "bite").damage, bite.damage + 3);
+  assert.equal(resolveBattleAttack(base, { ...target, effect: "glitchy" }, "bite").damage, bite.damage - 4);
+  assert.equal(
+    battleRange("bite", { mass: base.mass, effect: "turbo" }, target),
+    battleRange("bite", base, target) + 40,
+  );
+});
+
+test("battle attacks can defeat a target or pop the attacker", () => {
+  const fragile = { mass: 24, health: 1, status: "alive" as const, effect: null };
+  const knockout = resolveBattleAttack(
+    { mass: 50, health: 100, status: "alive" as const, effect: null },
+    fragile,
+    "fart",
+  );
+  assert.equal(knockout.target.status, "defeated");
+  assert.equal(knockout.targetDefeated, true);
+
+  const pop = resolveBattleAttack(
+    { mass: 96, health: 100, status: "alive" as const, effect: null },
+    { ...fragile, health: 100 },
+    "bite",
+  );
+  assert.equal(pop.attacker.mass, POPPING_MASS);
+  assert.equal(pop.attacker.status, "popped");
+  assert.equal(pop.attackerPopped, true);
 });

@@ -1,17 +1,20 @@
 # Slop Hogs
 
-A retro multiplayer farm game where Bluesky-linked pixel hogs roam together,
-eat short-lived AI slop, grow dangerously large, and eventually pop from AI
-psychosis. Movement uses WASD, arrow keys, or the on-screen directional pad.
-One hundred persistent achievements reward lifetime consumption, score,
+A retro multiplayer battle farm where Bluesky-linked pixel hogs roam together,
+eat short-lived AI slop for combat bonuses, and fight nearby hogs with Bite or
+Fart. Bite deals more damage but adds AI psychosis; Fart deals less damage and
+releases psychosis, and can be used even when no opponent is in range. Movement
+uses WASD, arrow keys, or the on-screen directional pad. Knockouts unlock a
+dedicated ladder of persistent battle achievements.
+One hundred and five persistent achievements reward lifetime consumption, score,
 movement, high-psychosis streaks, specialist diets, and spectacular failure.
 Unlocked badges open a prefilled Bluesky post without granting the game
 permission to post on the player's behalf.
 
 The farm is server-authoritative and persisted in PostgreSQL. Player movement,
-pickup claims, timed slop expiration, effects, popping, restarting, achievement
-progress, and unlocks are synchronized through `/api/farm`; the existing
-Bluesky login remains the identity boundary.
+pickup claims, timed slop expiration, effects, battle damage, knockouts,
+popping, redeployment, achievement progress, and unlocks are synchronized
+through `/api/farm`; the existing Bluesky login remains the identity boundary.
 
 ## Run locally
 
@@ -26,7 +29,7 @@ npm run dev
 If you use nvm and need to install the pinned default, run `nvm install` and `nvm use` first.
 
 Open http://localhost:3000. The title screen does not require a provider
-account. Entering the shared farm requires PostgreSQL and Bluesky OAuth
+account. Entering the battle farm requires PostgreSQL and Bluesky OAuth
 configuration.
 
 In development, open http://localhost:3000/gallery to compare the mutation-composed six-meal AI image, generated post, chatbot screenshot, human post, and shitpost builds. The gallery returns a normal not-found page in production.
