@@ -45,6 +45,16 @@ npm run simulate
 
 `check` validates the committed cost policy, checks TypeScript, and runs the native Node test suite. `smoke` starts the production build on loopback port 4317, checks the page and health endpoint, then stops it. `simulate` feeds five hogs six meals apiece and prints their stats for a quick behavior check. Database integration tests cover persisted growth cutoffs, read-only behavior, and restore-target isolation. CI runs the automated checks with a ten-minute job timeout and cancels superseded runs.
 
+## Server logs
+
+Meaningful HTTP requests and every state-changing Server Action emit one JSON
+`server.activity` event at completion. Events share a stable schema with the
+activity, outcome, duration, request and actor identifiers, deployment context,
+domain-specific results, and normalized error details. Health checks and static
+OAuth discovery documents are intentionally excluded to keep routine probes
+from overwhelming the activity stream. Fields whose names identify credentials
+or secrets are redacted before serialization.
+
 ## Cost boundary
 
 `config/cost-policy.json` holds the approved initial limits. Startup refuses missing, malformed, or unsafe settings. Invite-only registration and external previews are enabled. New public lookups are limited to 12 per account per UTC day and 100 globally per hour; cached previews do not spend lookup quota. Visitor treats are limited to three sent per account per UTC day, ten received per pen per day, one sender-to-pen gift per day, and 20 pending gifts per active hog. Authenticated owners can render at most two new cards per UTC day and the app can render 50 globally; failed render attempts count, one render runs per app instance, PNGs stop at 250 KB each, and stored cards stop at 250 MB total. The app records database size at startup and at most every 15 minutes during writes. It warns at 70% of the 1 GB internal budget, blocks registrations and cards at 85%, and rejects new game state changes at 95%. `features.readOnlyMode` is the manual emergency stop.

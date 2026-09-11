@@ -5,9 +5,10 @@ import { revalidatePath } from "next/cache";
 import { FOOD_KINDS, type FoodKind } from "@/lib/food";
 import { GameError, MUTATION_CATALOG } from "@/lib/game";
 import type { HogActionFormState } from "@/lib/hog-form";
-import { requireSameOriginToken } from "@/lib/server/action-auth";
+import { requireSameOriginSession } from "@/lib/server/action-auth";
 import { getDatabase } from "@/lib/server/database";
-import { cleanHog, feedHog, getAppSession } from "@/lib/server/hogs";
+import { cleanHog, feedHog } from "@/lib/server/hogs";
+import { startServerActivity, type ActivityOutcome } from "@/lib/server/logging";
 
 function errorState(error: unknown, requestId: string): HogActionFormState {
   if (error instanceof GameError) {
@@ -22,9 +23,13 @@ function errorState(error: unknown, requestId: string): HogActionFormState {
   if (error instanceof Error && ["Unauthorized", "Forbidden"].includes(error.message)) {
     return { status: "error", message: "Your session is no longer valid. Sign in again.", requestId };
   }
-  const message = error instanceof Error ? error.message : "Unknown hog action failure";
-  console.error(`Hog action failed: ${message}`);
   return { status: "error", message: "Your hog is temporarily refusing care.", requestId };
+}
+
+function errorOutcome(error: unknown): ActivityOutcome {
+  if (error instanceof GameError) return "rejected";
+  if (error instanceof Error && ["Unauthorized", "Forbidden"].includes(error.message)) return "denied";
+  return "failure";
 }
 
 function readRequestId(formData: FormData): string {
@@ -38,17 +43,24 @@ export async function feedTrayAction(
   formData: FormData,
 ): Promise<HogActionFormState> {
   let requestId = previous.requestId;
+  const event = startServerActivity("hog.feed", { activity_kind: "server_action", request_id: requestId });
   try {
     requestId = readRequestId(formData);
     const food = formData.get("food");
     if (typeof food !== "string" || !FOOD_KINDS.includes(food as FoodKind)) {
       throw new Error("Invalid tray meal");
     }
-    const token = await requireSameOriginToken();
-    const session = await getAppSession(getDatabase(), token);
-    if (!session) throw new Error("Unauthorized");
+    const database = getDatabase();
+    const { token, session } = await requireSameOriginSession(database);
+    if (!session.hogId) throw new Error("Unauthorized");
+    event.add({
+      request_id: requestId,
+      actor_did: session.ownerDid,
+      hog_id: session.hogId,
+      food,
+    });
     const result = await feedHog(
-      getDatabase(),
+      database,
       token,
       session.hogId,
       requestId,
@@ -61,6 +73,13 @@ export async function feedTrayAction(
       : null;
     revalidatePath("/");
     revalidatePath("/pen/[penId]", "page");
+    event.emit("success", {
+      meals_available: result.state.mealsAvailable,
+      meals_eaten: result.state.mealsEaten,
+      event_types: result.events.map(item => item.type),
+      mutation_id: discovery?.type === "mutation_discovered" ? discovery.mutation : undefined,
+      life_ended: ending?.type === "life_ended",
+    });
     return {
       status: "success",
       message: ending?.type === "life_ended"
@@ -71,7 +90,9 @@ export async function feedTrayAction(
       requestId: randomUUID(),
     };
   } catch (error) {
-    return errorState(error, requestId);
+    const state = errorState(error, requestId);
+    event.emit(errorOutcome(error), { response_status: state.status, request_id: requestId }, error);
+    return state;
   }
 }
 
@@ -80,22 +101,31 @@ export async function cleanHogAction(
   formData: FormData,
 ): Promise<HogActionFormState> {
   let requestId = previous.requestId;
+  const event = startServerActivity("hog.clean", { activity_kind: "server_action", request_id: requestId });
   try {
     requestId = readRequestId(formData);
-    const token = await requireSameOriginToken();
-    const session = await getAppSession(getDatabase(), token);
-    if (!session) throw new Error("Unauthorized");
-    const result = await cleanHog(getDatabase(), token, session.hogId, requestId);
+    const database = getDatabase();
+    const { token, session } = await requireSameOriginSession(database);
+    if (!session.hogId) throw new Error("Unauthorized");
+    event.add({ request_id: requestId, actor_did: session.ownerDid, hog_id: session.hogId });
+    const result = await cleanHog(database, token, session.hogId, requestId);
     const cleaned = result.events.find(event => event.type === "cleaned");
     if (!cleaned || cleaned.type !== "cleaned") throw new Error("Cleaning result is missing");
     revalidatePath("/");
     revalidatePath("/pen/[penId]", "page");
+    event.emit("success", {
+      filth_removed: cleaned.filthRemoved,
+      filth_after: result.state.stats.filth,
+      event_types: result.events.map(item => item.type),
+    });
     return {
       status: "success",
       message: `Washed off ${cleaned.filthRemoved} filth. The trough needs four hours to drain.`,
       requestId: randomUUID(),
     };
   } catch (error) {
-    return errorState(error, requestId);
+    const state = errorState(error, requestId);
+    event.emit(errorOutcome(error), { response_status: state.status, request_id: requestId }, error);
+    return state;
   }
 }

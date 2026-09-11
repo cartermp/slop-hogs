@@ -1,4 +1,5 @@
 import { Pool, type PoolClient } from "pg";
+import { logOperationalEvent } from "./logging.ts";
 
 const databaseGlobal = globalThis as typeof globalThis & { slopHogsPool?: Pool };
 
@@ -9,7 +10,11 @@ export function createDatabase(connectionString = process.env.DATABASE_URL): Poo
     idleTimeoutMillis: 10_000, statement_timeout: 5_000,
     lock_timeout: 3_000, idle_in_transaction_session_timeout: 10_000,
   });
-  pool.on("error", () => console.error("An idle database connection failed"));
+  pool.on("error", error => {
+    logOperationalEvent("database.pool.idle_error", "failure", {
+      database_pool_max: 4,
+    }, error);
+  });
   return pool;
 }
 
