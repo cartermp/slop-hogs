@@ -1,5 +1,7 @@
+import { createPrivateKey } from "node:crypto";
 import type { OAuthClientMetadataInput } from "@atproto/oauth-client-node";
 import { isValidDid } from "./dids.ts";
+import { loadTrustedProxyCount } from "./proxy-config.ts";
 
 export interface OAuthConfig {
   origin: string;
@@ -29,6 +31,20 @@ export function parseEncryptionKey(value: string | undefined): Buffer {
   return key;
 }
 
+export function parseOAuthPrivateKey(value: string | undefined): string {
+  if (!value) throw new Error("OAUTH_PRIVATE_KEY is required");
+  let key: ReturnType<typeof createPrivateKey>;
+  try {
+    key = createPrivateKey(value);
+  } catch {
+    throw new Error("OAUTH_PRIVATE_KEY must be a valid PEM private key");
+  }
+  if (key.asymmetricKeyType !== "ec" || key.asymmetricKeyDetails?.namedCurve !== "prime256v1") {
+    throw new Error("OAUTH_PRIVATE_KEY must be a P-256 EC private key");
+  }
+  return value;
+}
+
 export function parseInvitedDids(value = ""): ReadonlySet<string> {
   const invited = new Set(value.split(",").map(item => item.trim()).filter(Boolean));
   for (const value of invited) {
@@ -52,24 +68,16 @@ export function parseAdmissionDids(invitedValue = "", ownerValue = ""): Readonly
   ]);
 }
 
-function parseTrustedProxyCount(value: string | undefined, production: boolean): number {
-  if (value === undefined && !production) return 0;
-  if (!/^[0-5]$/.test(value ?? "")) throw new Error("TRUSTED_PROXY_COUNT must be an integer from 0 to 5");
-  return Number(value);
-}
-
 export function loadOAuthConfig(env: NodeJS.ProcessEnv = process.env): OAuthConfig {
   const production = env.NODE_ENV === "production";
-  const privateKey = env.OAUTH_PRIVATE_KEY;
-  if (!privateKey) throw new Error("OAUTH_PRIVATE_KEY is required");
   const keyId = env.OAUTH_KEY_ID ?? "slop-hogs-1";
   if (!/^[A-Za-z0-9._-]{1,64}$/.test(keyId)) throw new Error("OAUTH_KEY_ID is invalid");
   return {
     origin: parseAppOrigin(env.APP_ORIGIN, production),
-    privateKey,
+    privateKey: parseOAuthPrivateKey(env.OAUTH_PRIVATE_KEY),
     encryptionKey: parseEncryptionKey(env.OAUTH_ENCRYPTION_KEY),
     keyId,
-    trustedProxyCount: parseTrustedProxyCount(env.TRUSTED_PROXY_COUNT, production),
+    trustedProxyCount: loadTrustedProxyCount(env),
   };
 }
 

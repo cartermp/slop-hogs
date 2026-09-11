@@ -3,8 +3,8 @@ import { ActorSearchRateLimitError, reserveActorSearch, searchBlueskyActors } fr
 import { loadCostPolicy } from "@/lib/server/cost-policy";
 import { getDatabase } from "@/lib/server/database";
 import { requestSource } from "@/lib/server/hourly-rate-limit";
-import { loadOAuthConfig } from "@/lib/server/oauth-config";
 import { httpRequestFields, startServerActivity } from "@/lib/server/logging";
+import { loadTrustedProxyCount } from "@/lib/server/proxy-config";
 
 export const runtime = "nodejs";
 
@@ -30,8 +30,11 @@ export async function GET(request: Request) {
   }
   try {
     const policy = loadCostPolicy();
-    const config = loadOAuthConfig();
-    await reserveActorSearch(getDatabase(), requestSource(request, config.trustedProxyCount), policy.limits);
+    await reserveActorSearch(
+      getDatabase(),
+      requestSource(request, loadTrustedProxyCount()),
+      policy.limits,
+    );
     const actors = await searchBlueskyActors(query, policy.limits);
     event.emit("success", {
       http_status: 200,

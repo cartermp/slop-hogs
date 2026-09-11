@@ -1,14 +1,18 @@
 import assert from "node:assert/strict";
+import { generateKeyPairSync } from "node:crypto";
 import { test } from "node:test";
 import {
   createClientMetadata,
+  loadOAuthConfig,
   parseAdmissionDids,
   parseAppOrigin,
   parseEncryptionKey,
   parseInvitedDids,
+  parseOAuthPrivateKey,
   parseOwnerDids,
 } from "../src/lib/server/oauth-config.ts";
 import { loginSource } from "../src/lib/server/oauth.ts";
+import { loadTrustedProxyCount } from "../src/lib/server/proxy-config.ts";
 
 test("OAuth metadata requests identity only and publishes exact HTTPS URLs", () => {
   const origin = parseAppOrigin("https://hogs.example");
@@ -25,8 +29,33 @@ test("OAuth metadata requests identity only and publishes exact HTTPS URLs", () 
 
 test("OAuth secrets, invites, and trusted proxy addresses are validated", () => {
   const encoded = Buffer.alloc(32, 7).toString("base64");
+  const { privateKey } = generateKeyPairSync("ec", { namedCurve: "P-256" });
+  const privateKeyPem = privateKey.export({ type: "pkcs8", format: "pem" }).toString();
   assert.deepEqual(parseEncryptionKey(encoded), Buffer.alloc(32, 7));
   assert.throws(() => parseEncryptionKey(Buffer.alloc(31).toString("base64")), /32 bytes/);
+  assert.equal(parseOAuthPrivateKey(privateKeyPem), privateKeyPem);
+  assert.throws(() => parseOAuthPrivateKey("not a private key"), /valid PEM/);
+  assert.throws(
+    () => parseOAuthPrivateKey(
+      generateKeyPairSync("ec", { namedCurve: "P-384" }).privateKey
+        .export({ type: "pkcs8", format: "pem" })
+        .toString(),
+    ),
+    /P-256/,
+  );
+  assert.equal(loadTrustedProxyCount({ NODE_ENV: "development" }), 0);
+  assert.equal(loadTrustedProxyCount({ NODE_ENV: "production", TRUSTED_PROXY_COUNT: "1" }), 1);
+  assert.throws(
+    () => loadTrustedProxyCount({ NODE_ENV: "production" }),
+    /TRUSTED_PROXY_COUNT/,
+  );
+  assert.equal(loadOAuthConfig({
+    NODE_ENV: "production",
+    APP_ORIGIN: "https://hogs.example",
+    OAUTH_PRIVATE_KEY: privateKeyPem,
+    OAUTH_ENCRYPTION_KEY: encoded,
+    TRUSTED_PROXY_COUNT: "1",
+  }).trustedProxyCount, 1);
   assert.deepEqual([...parseInvitedDids("did:plc:alice, did:web:example.com")], [
     "did:plc:alice",
     "did:web:example.com",
