@@ -146,7 +146,7 @@ function eventMessage(event: FarmEvent): string {
     return `${event.move.toUpperCase()} hit ${event.targetName} for ${event.damage}. ${psychosis}.${event.targetDefeated ? " KNOCKOUT!" : ` ${event.targetHealth} HP left.`}`;
   }
   if (event.type === "psychosis_released") {
-    return `FART released ${event.amount} psychosis. No target required.`;
+    return `FART released ${event.amount} psychosis.`;
   }
   if (event.type === "achievements_unlocked") {
     const names = event.achievementIds
@@ -162,7 +162,7 @@ function eventMessage(event: FarmEvent): string {
 
 export function PixelFarm() {
   const [snapshot, setSnapshot] = useState<FarmSnapshot | null>(null);
-  const [notice, setNotice] = useState("Select a hog, close the gap, then Bite or Fart.");
+  const [notice, setNotice] = useState<string | null>(null);
   const [error, setError] = useState<string | null>(null);
   const [targetId, setTargetId] = useState<string | null>(null);
   const [battleEffect, setBattleEffect] = useState<BattleEffect | null>(null);
