@@ -10,7 +10,9 @@ for (const [path, status] of [["/api/health", 200], ["/", 200], ["/gallery", 404
     assert.deepEqual(await response.json(), {status:"ok"});
     assert.equal(response.headers.get("cache-control"), "no-store");
   } else if (path === "/") {
-    assert.match(await response.text(), /data-hog-variant="base"/);
+    const html = await response.text();
+    assert.match(html, /SLOP SYSTEMS PRESENTS/);
+    assert.match(html, /ROAM THE COMMUNAL FARM/);
   }
 }
 console.log("Deployed shell, health endpoint, gallery restriction and anonymous owner denial passed.");
