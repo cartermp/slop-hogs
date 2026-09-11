@@ -4,8 +4,12 @@ export const FARM_WIDTH = 960;
 export const FARM_HEIGHT = 576;
 export const STARTING_MASS = 24;
 export const POPPING_MASS = 100;
+export const MAX_HEALTH = 100;
 export const ONLINE_WINDOW_MS = 20_000;
 export const PSYCHOSIS_DECAY_INTERVAL_MS = 2_000;
+export const ATTACK_COOLDOWN_MS = 900;
+export const BITE_PSYCHOSIS = 7;
+export const FART_PSYCHOSIS_RELEASE = 10;
 
 export const SLOP_KINDS = [
   "hallucinated_citation",
@@ -17,8 +21,9 @@ export const SLOP_KINDS = [
 
 export type SlopKind = (typeof SLOP_KINDS)[number];
 export type HogEffect = "turbo" | "glitchy" | "recursive" | "collapsed" | "premium";
+export type BattleMove = "bite" | "fart";
 export type Facing = "left" | "right";
-export type FarmPlayerStatus = "alive" | "popped";
+export type FarmPlayerStatus = "alive" | "popped" | "defeated";
 
 export interface SlopDefinition {
   label: string;
@@ -29,6 +34,7 @@ export interface SlopDefinition {
   effect: HogEffect;
   effectLabel: string;
   effectDurationMs: number;
+  battleBonus: string;
 }
 
 export const SLOP_CATALOG: Record<SlopKind, SlopDefinition> = {
@@ -41,6 +47,7 @@ export const SLOP_CATALOG: Record<SlopKind, SlopDefinition> = {
     effect: "turbo",
     effectLabel: "CONFIDENTLY FAST",
     effectDurationMs: 5_000,
+    battleBonus: "Bite range +40",
   },
   context_overflow: {
     label: "Context Overflow",
@@ -51,6 +58,7 @@ export const SLOP_CATALOG: Record<SlopKind, SlopDefinition> = {
     effect: "glitchy",
     effectLabel: "CONTEXT LEAK",
     effectDurationMs: 6_000,
+    battleBonus: "Absorbs 4 incoming damage",
   },
   recursive_prompt: {
     label: "Recursive Prompt",
@@ -61,6 +69,7 @@ export const SLOP_CATALOG: Record<SlopKind, SlopDefinition> = {
     effect: "recursive",
     effectLabel: "RECURSING...",
     effectDurationMs: 7_000,
+    battleBonus: "Fart damage +6",
   },
   model_collapse: {
     label: "Model Collapse",
@@ -71,6 +80,7 @@ export const SLOP_CATALOG: Record<SlopKind, SlopDefinition> = {
     effect: "collapsed",
     effectLabel: "MODEL COLLAPSE",
     effectDurationMs: 6_000,
+    battleBonus: "Bite damage +7",
   },
   premium_tokens: {
     label: "Premium Tokens",
@@ -81,6 +91,7 @@ export const SLOP_CATALOG: Record<SlopKind, SlopDefinition> = {
     effect: "premium",
     effectLabel: "SERIES A HOG",
     effectDurationMs: 5_000,
+    battleBonus: "All damage +3",
   },
 };
 
@@ -93,6 +104,8 @@ export interface FarmPlayer {
   mass: number;
   score: number;
   slopEaten: number;
+  health: number;
+  knockouts: number;
   status: FarmPlayerStatus;
   effect: HogEffect | null;
   effectExpiresAtMs: number | null;
@@ -117,10 +130,21 @@ export interface FarmSnapshot {
 
 export type FarmAction =
   | { type: "move"; dx: -1 | 0 | 1; dy: -1 | 0 | 1 }
+  | { type: "bite"; targetId: string }
+  | { type: "fart"; targetId: string }
   | { type: "restart" };
 
 export type FarmEvent =
   | { type: "slop_eaten"; kind: SlopKind; massGained: number; pointsGained: number }
+  | {
+    type: "battle_attack";
+    move: BattleMove;
+    targetName: string;
+    damage: number;
+    targetHealth: number;
+    psychosisDelta: number;
+    targetDefeated: boolean;
+  }
   | { type: "popped" }
   | { type: "restarted" }
   | { type: "achievements_unlocked"; achievementIds: string[] };
@@ -147,12 +171,38 @@ export interface PsychosisState {
   psychosisUpdatedAtMs: number;
 }
 
+export interface BattleCombatant {
+  mass: number;
+  health: number;
+  status: FarmPlayerStatus;
+  effect: HogEffect | null;
+}
+
+export interface BattleResult {
+  attacker: BattleCombatant;
+  target: BattleCombatant;
+  damage: number;
+  psychosisDelta: number;
+  targetDefeated: boolean;
+  attackerPopped: boolean;
+}
+
+const playerIdPattern = /^[0-9a-f]{8}-[0-9a-f]{4}-[1-5][0-9a-f]{3}-[89ab][0-9a-f]{3}-[0-9a-f]{12}$/i;
+
 export function parseFarmAction(value: unknown): FarmAction {
   if (!value || typeof value !== "object" || Array.isArray(value)) {
     throw new Error("Invalid farm action");
   }
   const action = value as Record<string, unknown>;
   if (action.type === "restart" && Object.keys(action).length === 1) return { type: "restart" };
+  if (
+    (action.type === "bite" || action.type === "fart")
+    && Object.keys(action).length === 2
+    && typeof action.targetId === "string"
+    && playerIdPattern.test(action.targetId)
+  ) {
+    return { type: action.type, targetId: action.targetId };
+  }
   if (
     action.type === "move"
     && Object.keys(action).length === 3
@@ -174,8 +224,58 @@ export function psychosisLevel(mass: number): number {
     / (POPPING_MASS - STARTING_MASS);
 }
 
+export function battleRange(
+  move: BattleMove,
+  attacker: Pick<BattleCombatant, "mass" | "effect">,
+  target: Pick<BattleCombatant, "mass">,
+): number {
+  const bodyReach = (hogDiameter(attacker.mass) + hogDiameter(target.mass)) / 2;
+  if (move === "fart") return bodyReach + 105;
+  return bodyReach + 24 + (attacker.effect === "turbo" ? 40 : 0);
+}
+
+export function resolveBattleAttack(
+  attacker: BattleCombatant,
+  target: BattleCombatant,
+  move: BattleMove,
+): BattleResult {
+  let damage = move === "bite"
+    ? 18 + Math.floor((attacker.mass - STARTING_MASS) / 12)
+    : 8;
+  if (attacker.effect === "collapsed" && move === "bite") damage += 7;
+  if (attacker.effect === "recursive" && move === "fart") damage += 6;
+  if (attacker.effect === "premium") damage += 3;
+  if (target.effect === "glitchy") damage -= 4;
+  damage = Math.max(1, damage);
+
+  const mass = move === "bite"
+    ? Math.min(POPPING_MASS, attacker.mass + BITE_PSYCHOSIS)
+    : Math.max(STARTING_MASS, attacker.mass - FART_PSYCHOSIS_RELEASE);
+  const health = Math.max(0, target.health - damage);
+  const attackerPopped = mass >= POPPING_MASS;
+  const targetDefeated = health === 0;
+  return {
+    attacker: {
+      ...attacker,
+      mass,
+      status: attackerPopped ? "popped" : attacker.status,
+      effect: attackerPopped ? null : attacker.effect,
+    },
+    target: {
+      ...target,
+      health,
+      status: targetDefeated ? "defeated" : target.status,
+      effect: targetDefeated ? null : target.effect,
+    },
+    damage,
+    psychosisDelta: mass - attacker.mass,
+    targetDefeated,
+    attackerPopped,
+  };
+}
+
 export function decayPsychosis<T extends PsychosisState>(player: T, nowMs: number): T {
-  if (player.status === "popped") return player;
+  if (player.status !== "alive") return player;
   if (player.mass <= STARTING_MASS) {
     return { ...player, mass: STARTING_MASS, psychosisUpdatedAtMs: nowMs };
   }
@@ -197,7 +297,7 @@ export function movePlayer<T extends MovablePlayer>(
   action: Extract<FarmAction, { type: "move" }>,
   nowMs: number,
 ): T {
-  if (player.status === "popped") return player;
+  if (player.status !== "alive") return player;
   const elapsedMs = Math.max(0, Math.min(240, nowMs - player.lastMovedAtMs));
   const activeEffect = player.effectExpiresAtMs !== null && player.effectExpiresAtMs > nowMs
     ? player.effect
@@ -246,7 +346,7 @@ export function applySlop(
   player: typeof player;
   events: FarmEvent[];
 } {
-  if (player.status === "popped") return { player, events: [] };
+  if (player.status !== "alive") return { player, events: [] };
   const definition = SLOP_CATALOG[kind];
   const mass = Math.min(POPPING_MASS, player.mass + definition.mass);
   const massGained = mass - player.mass;

@@ -61,14 +61,19 @@ export async function POST(request: Request) {
       : message === "Forbidden" ? 403
         : error instanceof ReadOnlyError ? 503
         : error instanceof SyntaxError
-          || message === "Only a popped hog can restart"
+          || message === "Only a stopped hog can redeploy"
+          || message === "Only living hogs can battle"
+          || message === "That opponent is no longer in the battle"
+          || message === "That opponent is out of range"
+          || message === "Attack is cooling down"
           || message === "Invalid farm action" ? 400
           : 500;
     if (status >= 500) logOperationalEvent("farm.action", "failure", {}, error);
     return Response.json(
       {
         error: status === 500 ? "The farm action failed"
-          : status === 400 ? "Invalid farm action"
+          : status === 400 && (error instanceof SyntaxError || message === "Invalid farm action")
+            ? "Invalid farm action"
             : status === 503 ? "The farm is temporarily read-only"
               : message,
       },
