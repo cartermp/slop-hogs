@@ -19,6 +19,11 @@ test("the shared farm persists players, claims slop once, pops, and restarts", a
     assert.equal(joined.players.length, 2);
     assert.equal(joined.players.filter(player => player.isYou).length, 1);
     assert.equal(joined.slop.length, 16);
+    await pool.query("UPDATE accounts SET handle='phillipcarter.dev' WHERE did=$1", [dids[0]]);
+    assert.equal(
+      (await syncFarm(pool, dids[0], now + 2)).players.find(player => player.isYou)?.name,
+      "phillipcarter.dev",
+    );
 
     const first = joined.players.find(player => !player.isYou)!;
     await pool.query("DELETE FROM farm_slop");
@@ -31,6 +36,18 @@ test("the shared farm persists players, claims slop once, pops, and restarts", a
     const ate = await actOnFarm(pool, dids[0], { type: "move", dx: 1, dy: 0 }, now);
     assert.deepEqual(ate.events.map(event => event.type), ["slop_eaten"]);
     assert.equal(ate.snapshot.players.find(player => player.isYou)?.mass, 31);
+
+    await pool.query(
+      `UPDATE farm_players
+          SET mass=40, psychosis_updated_at=to_timestamp($2 / 1000.0)
+        WHERE owner_did=$1`,
+      [dids[0], now],
+    );
+    now += 4_000;
+    assert.equal(
+      (await syncFarm(pool, dids[0], now)).players.find(player => player.isYou)?.mass,
+      38,
+    );
 
     await pool.query("DELETE FROM farm_slop");
     await pool.query(

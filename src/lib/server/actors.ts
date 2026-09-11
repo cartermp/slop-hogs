@@ -82,6 +82,48 @@ function parseActors(payload: unknown): ActorSuggestion[] {
   return actors;
 }
 
+export async function resolveBlueskyHandle(
+  did: string,
+  limits: { externalRequestTimeoutMs: number; externalResponseMaxBytes: number },
+  fetchImplementation: FetchImplementation = fetch,
+): Promise<string> {
+  if (!isValidDid(did)) throw new Error("Invalid DID");
+  const url = new URL("/xrpc/app.bsky.actor.getProfile", BLUESKY_PUBLIC_API);
+  url.searchParams.set("actor", did);
+  const timeout = new AbortController();
+  const timer = setTimeout(() => timeout.abort(), limits.externalRequestTimeoutMs);
+  try {
+    const response = await fetchImplementation(url, {
+      headers: { accept: "application/json" },
+      cache: "no-store",
+      redirect: "error",
+      signal: timeout.signal,
+    });
+    if (!response.ok) {
+      await response.body?.cancel();
+      throw new Error(`Bluesky profile lookup returned HTTP ${response.status}`);
+    }
+    const text = await readBoundedBody(response, limits.externalResponseMaxBytes);
+    let payload: unknown;
+    try {
+      payload = JSON.parse(text);
+    } catch {
+      throw new Error("Bluesky returned invalid profile JSON");
+    }
+    if (
+      !isRecord(payload)
+      || payload.did !== did
+      || typeof payload.handle !== "string"
+      || !isValidBlueskyHandle(payload.handle.toLowerCase())
+    ) {
+      throw new Error("Bluesky returned an invalid profile");
+    }
+    return payload.handle.toLowerCase();
+  } finally {
+    clearTimeout(timer);
+  }
+}
+
 export async function searchBlueskyActors(
   input: string,
   limits: { externalRequestTimeoutMs: number; externalResponseMaxBytes: number },

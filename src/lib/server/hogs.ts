@@ -10,6 +10,7 @@ import {
   type GameState,
   type GameResult,
 } from "../game.ts";
+import { isValidBlueskyHandle } from "../bluesky-handles.ts";
 import { loadCostPolicy } from "./cost-policy.ts";
 import { transaction } from "./database.ts";
 import { isValidDid } from "./dids.ts";
@@ -67,6 +68,7 @@ export interface AppSession {
 export interface AccountSession {
   ownerDid: string;
   hogId: string | null;
+  handle: string | null;
 }
 
 export interface HogView extends AppSession {
@@ -75,20 +77,35 @@ export interface HogView extends AppSession {
 
 export async function getAccountSession(pool: Pool, token: string): Promise<AccountSession | null> {
   if (!sessionToken.test(token)) return null;
-  const result = await pool.query<{ owner_did: string; hog_id: string | null }>(
-    `SELECT session.owner_did, hog.id AS hog_id
+  const result = await pool.query<{ owner_did: string; hog_id: string | null; handle: string | null }>(
+    `SELECT session.owner_did, hog.id AS hog_id, account.handle
        FROM app_sessions session
+       JOIN accounts account ON account.did=session.owner_did
        LEFT JOIN hog_lives hog ON hog.owner_did=session.owner_did AND hog.ended_at IS NULL
       WHERE session.token_hash=$1 AND session.expires_at > clock_timestamp()`,
     [hash(token)],
   );
   if (!result.rowCount) return null;
-  return { ownerDid: result.rows[0].owner_did, hogId: result.rows[0].hog_id };
+  return {
+    ownerDid: result.rows[0].owner_did,
+    hogId: result.rows[0].hog_id,
+    handle: result.rows[0].handle,
+  };
 }
 
 export async function getAppSession(pool: Pool, token: string): Promise<AppSession | null> {
   const session = await getAccountSession(pool, token);
   return session?.hogId ? { ownerDid: session.ownerDid, hogId: session.hogId } : null;
+}
+
+export async function setAccountHandle(pool: Pool, verifiedDid: string, handle: string): Promise<void> {
+  if (!isValidDid(verifiedDid)) throw new Error("Invalid DID");
+  if (!isValidBlueskyHandle(handle)) throw new Error("Invalid Bluesky handle");
+  const result = await pool.query(
+    "UPDATE accounts SET handle=$2 WHERE did=$1",
+    [verifiedDid, handle],
+  );
+  if (!result.rowCount) throw new Error("Account does not exist");
 }
 
 export async function getHogView(pool: Pool, token: string): Promise<HogView | null> {
@@ -128,10 +145,18 @@ export async function revokeSession(pool: Pool, token: string): Promise<string |
 export async function completeOAuthSignIn(
   pool: Pool,
   verifiedDid: string,
+  verifiedHandle?: string,
 ): Promise<{ token: string; hogId: string }> {
   if (!isValidDid(verifiedDid)) throw new Error("Invalid DID");
+  if (verifiedHandle !== undefined && !isValidBlueskyHandle(verifiedHandle)) {
+    throw new Error("Invalid Bluesky handle");
+  }
   return transaction(pool, async client => {
-    await client.query("INSERT INTO accounts(did) VALUES ($1) ON CONFLICT DO NOTHING", [verifiedDid]);
+    await client.query(
+      `INSERT INTO accounts(did, handle) VALUES ($1,$2)
+       ON CONFLICT (did) DO UPDATE SET handle=COALESCE(EXCLUDED.handle, accounts.handle)`,
+      [verifiedDid, verifiedHandle ?? null],
+    );
     await client.query("SELECT did FROM accounts WHERE did=$1 FOR UPDATE", [verifiedDid]);
     const hogId = await ensureHog(client, verifiedDid);
     const token = randomBytes(32).toString("hex");
