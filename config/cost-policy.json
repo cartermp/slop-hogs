@@ -1,11 +1,10 @@
 {
-  "version": 3,
+  "version": 4,
   "railway": {
     "usageAlertCents": 1500,
     "computeHardLimitCents": 3000
   },
   "limits": {
-    "accounts": 50,
     "loginAttemptsPerIpPerHour": 5,
     "loginAttemptsGlobalPerHour": 200,
     "actorSearchesPerIpPerHour": 60,
@@ -29,7 +28,6 @@
     "readOnlyPercent": 95
   },
   "features": {
-    "registrations": true,
     "readOnlyMode": false,
     "externalPreviews": true,
     "cardRendering": true,

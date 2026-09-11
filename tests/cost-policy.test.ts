@@ -10,11 +10,10 @@ const fixture = () => JSON.parse(readFileSync(new URL("../config/cost-policy.jso
 
 test("committed policy enables only enforced controls and keeps paid AI closed", () => {
   const policy = parseCostPolicy(fixture());
-  assert.equal(policy.features.registrations, true);
   assert.equal(policy.features.externalPreviews, true);
   assert.equal(policy.features.cardRendering, true);
   assert.ok(Object.entries(policy.features)
-    .filter(([name]) => !["registrations", "externalPreviews", "cardRendering"].includes(name))
+    .filter(([name]) => !["externalPreviews", "cardRendering"].includes(name))
     .every(([, value]) => value === false));
   assert.equal(policy.paidAiMonthlyBudgetCents, 0);
   assert.equal(policy.railway.computeHardLimitCents, 3_000);
@@ -41,7 +40,7 @@ test("every quota rejects zero, negative, fractional, nonnumeric and excessive v
 
 test("unfinished features reject true and every feature rejects invalid booleans", () => {
   for (const key of Object.keys(fixture().features)
-    .filter(key => !["registrations", "readOnlyMode", "externalPreviews", "cardRendering"].includes(key))) {
+    .filter(key => !["readOnlyMode", "externalPreviews", "cardRendering"].includes(key))) {
     const enabled = fixture();
     enabled.features[key] = true;
     assert.throws(() => parseCostPolicy(enabled), /must remain false/);
@@ -116,12 +115,9 @@ test("database budget and thresholds can only become stricter", () => {
 
 test("lower finite limits are allowed without enabling features", () => {
   const input = fixture();
-  input.limits.accounts = 10;
   input.railway = { usageAlertCents: 500, computeHardLimitCents: 1_000 };
   input.database = { maxBytes: 500_000_000, warningPercent: 50, restrictPercent: 75, readOnlyPercent: 90 };
-  assert.equal(parseCostPolicy(input).limits.accounts, 10);
-  input.features.registrations = false;
-  assert.equal(parseCostPolicy(input).features.registrations, false);
+  assert.equal(parseCostPolicy(input).railway.computeHardLimitCents, 1_000);
 });
 
 test("startup check exits nonzero for missing, malformed, or unsafe files", () => {

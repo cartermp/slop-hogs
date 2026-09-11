@@ -8,7 +8,6 @@ export interface StorageControls {
   databaseSizeBytes: number;
   usedPercent: number;
   warning: boolean;
-  registrationsBlocked: boolean;
   cardsBlocked: boolean;
   readOnly: boolean;
   measuredAt: Date;
@@ -18,7 +17,6 @@ interface OperationalStatusRow {
   database_size_bytes: string | null;
   database_used_percent: string | null;
   warning: boolean;
-  registrations_blocked: boolean;
   cards_blocked: boolean;
   read_only: boolean;
   measured_at: Date | null;
@@ -51,7 +49,6 @@ export function deriveStorageControls(
     databaseSizeBytes,
     usedPercent,
     warning: scaledSize >= budget * BigInt(policy.warningPercent),
-    registrationsBlocked: manualReadOnly || scaledSize >= budget * BigInt(policy.restrictPercent),
     cardsBlocked: manualReadOnly || scaledSize >= budget * BigInt(policy.restrictPercent),
     readOnly: manualReadOnly || scaledSize >= budget * BigInt(policy.readOnlyPercent),
     measuredAt,
@@ -64,7 +61,6 @@ function mapStatus(row: OperationalStatusRow): StorageControls | null {
     databaseSizeBytes: Number(row.database_size_bytes),
     usedPercent: Number(row.database_used_percent),
     warning: row.warning,
-    registrationsBlocked: row.registrations_blocked,
     cardsBlocked: row.cards_blocked,
     readOnly: row.read_only,
     measuredAt: row.measured_at,
@@ -75,7 +71,6 @@ function controlsMatch(left: StorageControls, right: StorageControls): boolean {
   return left.databaseSizeBytes === right.databaseSizeBytes
     && left.usedPercent === right.usedPercent
     && left.warning === right.warning
-    && left.registrationsBlocked === right.registrationsBlocked
     && left.cardsBlocked === right.cardsBlocked
     && left.readOnly === right.readOnly
     && left.measuredAt.getTime() === right.measuredAt.getTime();
@@ -83,8 +78,7 @@ function controlsMatch(left: StorageControls, right: StorageControls): boolean {
 
 async function readOperationalStatus(client: PoolClient, lock: boolean): Promise<OperationalStatusRow | null> {
   const result = await client.query<OperationalStatusRow>(
-    `SELECT database_size_bytes, database_used_percent, warning, registrations_blocked,
-            cards_blocked, read_only, measured_at,
+    `SELECT database_size_bytes, database_used_percent, warning, cards_blocked, read_only, measured_at,
             measured_at > clock_timestamp() - ($1 * interval '1 minute') AS fresh
        FROM operational_status
       WHERE id=true
@@ -136,14 +130,12 @@ export async function refreshOperationalStatus(
   const controls = deriveStorageControls(databaseSizeBytes, policy.database, policy.readOnlyMode, measuredAt);
   await client.query(
     `INSERT INTO operational_status(
-       id, database_size_bytes, database_used_percent, warning,
-       registrations_blocked, cards_blocked, read_only, measured_at
-     ) VALUES (true,$1,$2,$3,$4,$5,$6,$7)
+       id, database_size_bytes, database_used_percent, warning, cards_blocked, read_only, measured_at
+     ) VALUES (true,$1,$2,$3,$4,$5,$6)
      ON CONFLICT (id) DO UPDATE SET
        database_size_bytes=EXCLUDED.database_size_bytes,
        database_used_percent=EXCLUDED.database_used_percent,
        warning=EXCLUDED.warning,
-       registrations_blocked=EXCLUDED.registrations_blocked,
        cards_blocked=EXCLUDED.cards_blocked,
        read_only=EXCLUDED.read_only,
        measured_at=EXCLUDED.measured_at`,
@@ -151,7 +143,6 @@ export async function refreshOperationalStatus(
       controls.databaseSizeBytes,
       controls.usedPercent,
       controls.warning,
-      controls.registrationsBlocked,
       controls.cardsBlocked,
       controls.readOnly,
       controls.measuredAt,

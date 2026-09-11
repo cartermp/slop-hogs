@@ -4,10 +4,8 @@ import { test } from "node:test";
 import {
   createClientMetadata,
   loadOAuthConfig,
-  parseAdmissionDids,
   parseAppOrigin,
   parseEncryptionKey,
-  parseInvitedDids,
   parseOAuthPrivateKey,
   parseOwnerDids,
 } from "../src/lib/server/oauth-config.ts";
@@ -27,7 +25,7 @@ test("OAuth metadata requests identity only and publishes exact HTTPS URLs", () 
   assert.throws(() => parseAppOrigin("https://hogs.example/path"), /must be an origin/);
 });
 
-test("OAuth secrets, invites, and trusted proxy addresses are validated", () => {
+test("OAuth secrets, owner DIDs, and trusted proxy addresses are validated", () => {
   const encoded = Buffer.alloc(32, 7).toString("base64");
   const { privateKey } = generateKeyPairSync("ec", { namedCurve: "P-256" });
   const privateKeyPem = privateKey.export({ type: "pkcs8", format: "pem" }).toString();
@@ -56,17 +54,8 @@ test("OAuth secrets, invites, and trusted proxy addresses are validated", () => 
     OAUTH_ENCRYPTION_KEY: encoded,
     TRUSTED_PROXY_COUNT: "1",
   }).trustedProxyCount, 1);
-  assert.deepEqual([...parseInvitedDids("did:plc:alice, did:web:example.com")], [
-    "did:plc:alice",
-    "did:web:example.com",
-  ]);
-  assert.throws(() => parseInvitedDids("alice.bsky.social"), /invalid DID/);
   assert.deepEqual([...parseOwnerDids("did:plc:owner")], ["did:plc:owner"]);
   assert.throws(() => parseOwnerDids("owner.bsky.social"), /invalid DID/);
-  assert.deepEqual(
-    [...parseAdmissionDids("did:plc:guest,did:plc:owner", "did:plc:owner,did:plc:operator")],
-    ["did:plc:guest", "did:plc:owner", "did:plc:operator"],
-  );
 
   const request = new Request("https://hogs.example", { headers: { "x-forwarded-for": "spoofed, 203.0.113.8" } });
   assert.equal(loginSource(request, 1), "203.0.113.8");

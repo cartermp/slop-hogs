@@ -23,9 +23,6 @@ const messages: Record<string, string> = {
   invalid_handle: "Enter a valid Bluesky handle.",
   login_unavailable: "Bluesky login is temporarily unavailable. Please try again.",
   login_rate_limited: "Too many login attempts. Please wait and try again.",
-  not_invited: "That Bluesky account is not on the private-alpha invite list.",
-  registration_closed: "New private-alpha registrations are temporarily closed.",
-  account_limit: "The private alpha is full.",
   provider_logout: "You are signed out here, but Bluesky could not be reached to revoke the provider session.",
 };
 
@@ -97,7 +94,7 @@ export default async function Home({
             <p className="pen-label">{profile ? "The pen is empty." : "Your hog is almost ready."}</p>
             <p>{profile
               ? "This account has no active or completed hog life."
-              : "Sign in with Bluesky to claim one private-alpha hog. Slop Hogs requests identity only and cannot post for you."}</p>
+              : "Sign in with Bluesky to claim your hog. Slop Hogs requests identity only and cannot post for you."}</p>
           </div>
         </div>
       )}

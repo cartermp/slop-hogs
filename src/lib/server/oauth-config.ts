@@ -45,27 +45,12 @@ export function parseOAuthPrivateKey(value: string | undefined): string {
   return value;
 }
 
-export function parseInvitedDids(value = ""): ReadonlySet<string> {
-  const invited = new Set(value.split(",").map(item => item.trim()).filter(Boolean));
-  for (const value of invited) {
-    if (!isValidDid(value)) throw new Error("BLUESKY_INVITED_DIDS contains an invalid DID");
-  }
-  return invited;
-}
-
 export function parseOwnerDids(value = ""): ReadonlySet<string> {
   const owners = new Set(value.split(",").map(item => item.trim()).filter(Boolean));
   for (const owner of owners) {
     if (!isValidDid(owner)) throw new Error("SLOP_HOGS_OWNER_DIDS contains an invalid DID");
   }
   return owners;
-}
-
-export function parseAdmissionDids(invitedValue = "", ownerValue = ""): ReadonlySet<string> {
-  return new Set([
-    ...parseInvitedDids(invitedValue),
-    ...parseOwnerDids(ownerValue),
-  ]);
 }
 
 export function loadOAuthConfig(env: NodeJS.ProcessEnv = process.env): OAuthConfig {
