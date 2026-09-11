@@ -122,6 +122,12 @@
 }
 
 .hud strong { font: 24px var(--terminal); }
+.hud-hog strong {
+  display: block;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
 .mass-meter {
   display: grid;
   grid-template-columns: 1fr auto;
