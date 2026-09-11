@@ -743,22 +743,18 @@
   font-size: 40px;
   animation: title-hog 1s steps(2) infinite;
 }
-.login-copy {
-  display: flex;
-  justify-content: center;
-  flex-wrap: wrap;
-  gap: 8px 22px;
-  color: #f6d98f;
-  font: 8px/1.5 var(--pixel);
-}
-.login-copy p { margin: 0; }
 .terminal-auth {
   margin-top: 26px;
   border-block: 3px solid #513546;
   padding: 22px 0;
 }
 .terminal-auth .login-form { max-width: 580px; margin: 0 auto; text-align: left; }
-.terminal-auth .login-form label { color: #f6d98f; font: 8px var(--pixel); }
+.terminal-auth .login-row {
+  align-items: stretch;
+  gap: 10px;
+}
+.terminal-auth .login-form input,
+.terminal-auth .auth-button { min-height: 62px; }
 .terminal-auth .login-form input {
   border: 3px solid #121013;
   border-radius: 0;
@@ -767,16 +763,15 @@
   font-size: 22px;
 }
 .terminal-auth .auth-button {
+  min-width: 0;
   border-radius: 0;
   background: #c8e85a;
   font: 8px/1.4 var(--pixel);
   box-shadow: 4px 4px 0 #a52f5b;
 }
-.terminal-auth > p { margin: 16px 0 0; color: #9e8e99; font: 14px var(--terminal); }
 .terminal-notice { color: #8aff7b; font: 18px var(--terminal); }
 .terminal-error { color: #ff7694; }
 .blink-prompt { margin-top: 20px; color: #f0a9c0; font: 18px var(--terminal); }
-.blink-prompt span { animation: loading-blink .7s steps(2) infinite; }
 
 @keyframes online-pulse { 50% { opacity: .35; } }
 @keyframes slop-bob { 50% { margin-top: -5px; } }
@@ -812,6 +807,8 @@
   .controls-copy { display: none; }
   .d-pad { display: grid; }
   .game-message { font-size: 16px; }
+  .terminal-auth .login-row { align-items: flex-start; }
+  .terminal-auth .handle-combobox { width: 100%; }
   .slop-legend { grid-template-columns: 1fr; }
   .slop-legend > div { grid-column: auto; }
   .achievement-heading { align-items: flex-start; flex-direction: column; }
@@ -823,5 +820,5 @@
 
 @media (prefers-reduced-motion: reduce) {
   .online-dot, .slop-pickup, .effect-bubble, .pixel-hog, .pixel-pop,
-  .farm-loading, .blink-prompt span, .login-pig { animation: none; }
+  .farm-loading, .login-pig { animation: none; }
 }

@@ -86,7 +86,6 @@ export function LoginForm() {
 
   return (
     <form className="login-form" action="/oauth/login" method="post">
-      <label htmlFor="handle">Bluesky handle</label>
       <div className="login-row">
         <div
           className="handle-combobox"
@@ -102,6 +101,7 @@ export function LoginForm() {
             autoCapitalize="none"
             spellCheck={false}
             required
+            aria-label="Bluesky handle"
             maxLength={253}
             role="combobox"
             aria-autocomplete="list"
