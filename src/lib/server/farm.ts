@@ -66,7 +66,7 @@ interface PlayerRow {
   effect_expires_at: Date | null;
   last_moved_at: Date;
   last_attack_at: Date | null;
-  psychosis_updated_at: Date;
+  psychosis_movement_ms: number;
   updated_at: Date;
   handle: string | null;
 }
@@ -324,18 +324,13 @@ async function maintainSlop(client: PoolClient, nowMs: number): Promise<void> {
 
 function mapPlayer(row: PlayerRow, ownerDid: string, nowMs: number): FarmPlayer {
   const effectActive = row.effect_expires_at !== null && row.effect_expires_at.getTime() > nowMs;
-  const psychosis = decayPsychosis({
-    mass: row.mass,
-    status: row.status,
-    psychosisUpdatedAtMs: row.psychosis_updated_at.getTime(),
-  }, nowMs);
   return {
     id: row.player_id,
     name: row.handle ?? row.owner_did,
     x: row.x,
     y: row.y,
     facing: row.facing,
-    mass: psychosis.mass,
+    mass: row.mass,
     score: row.score,
     slopEaten: row.slop_eaten,
     health: row.health,
@@ -364,7 +359,7 @@ async function readSnapshot(client: PoolClient, ownerDid: string, nowMs: number)
       `SELECT player.owner_did, player.player_id, player.x, player.y, player.facing,
               player.mass, player.score, player.slop_eaten, player.health, player.knockouts,
               player.status, player.effect, player.effect_expires_at, player.last_moved_at,
-              player.last_attack_at, player.psychosis_updated_at,
+              player.last_attack_at, player.psychosis_movement_ms,
               player.updated_at, account.handle
          FROM farm_players player
          JOIN accounts account ON account.did=player.owner_did
@@ -406,24 +401,11 @@ export async function syncFarm(pool: Pool, ownerDid: string, suppliedNowMs?: num
     }
     await ensurePlayer(client, ownerDid);
     await ensureAchievementProgress(client, ownerDid);
-    const selected = await client.query<Pick<ActionPlayerRow, "mass" | "status" | "psychosis_updated_at">>(
-      `SELECT mass, status, psychosis_updated_at
-         FROM farm_players
-        WHERE owner_did=$1
-        FOR UPDATE`,
-      [ownerDid],
-    );
-    const psychosis = decayPsychosis({
-      mass: selected.rows[0].mass,
-      status: selected.rows[0].status,
-      psychosisUpdatedAtMs: selected.rows[0].psychosis_updated_at.getTime(),
-    }, nowMs);
     await client.query(
       `UPDATE farm_players
-          SET mass=$2, psychosis_updated_at=to_timestamp($3 / 1000.0),
-              updated_at=to_timestamp($4 / 1000.0)
+          SET updated_at=to_timestamp($2 / 1000.0)
         WHERE owner_did=$1`,
-      [ownerDid, psychosis.mass, psychosis.psychosisUpdatedAtMs, nowMs],
+      [ownerDid, nowMs],
     );
     const initializeCatalog = await initializeAchievementCatalog(client, ownerDid);
     await maintainSlop(client, nowMs);
@@ -457,23 +439,13 @@ export async function actOnFarm(
     const selected = await client.query<ActionPlayerRow>(
       `SELECT owner_did, player_id, x, y, facing, mass, score, slop_eaten, health,
               knockouts, status, effect, effect_expires_at, last_moved_at,
-              last_attack_at, psychosis_updated_at, updated_at
+              last_attack_at, psychosis_movement_ms, updated_at
          FROM farm_players
         WHERE owner_did=$1
         FOR UPDATE`,
       [ownerDid],
     );
-    const storedRow = selected.rows[0];
-    const decayed = decayPsychosis({
-      mass: storedRow.mass,
-      status: storedRow.status,
-      psychosisUpdatedAtMs: storedRow.psychosis_updated_at.getTime(),
-    }, nowMs);
-    const row = {
-      ...storedRow,
-      mass: decayed.mass,
-      psychosis_updated_at: new Date(decayed.psychosisUpdatedAtMs),
-    };
+    const row = selected.rows[0];
     const initializeCatalog = await initializeAchievementCatalog(client, ownerDid);
     const achievementProgress = await readAchievementProgress(client, ownerDid, true);
     let nextAchievementProgress = achievementProgress;
@@ -487,7 +459,7 @@ export async function actOnFarm(
             SET x=$2, y=$3, facing='right', mass=$4, score=0, slop_eaten=0, health=$5,
                 status='alive', effect=NULL, effect_expires_at=NULL,
                 last_moved_at=to_timestamp($6 / 1000.0), last_attack_at=NULL,
-                psychosis_updated_at=to_timestamp($6 / 1000.0),
+                psychosis_movement_ms=0,
                 updated_at=to_timestamp($6 / 1000.0), popped_at=NULL,
                 defeated_at=NULL, defeat_cause=NULL
           WHERE owner_did=$1`,
@@ -522,7 +494,7 @@ export async function actOnFarm(
               SET mass=$2, effect=$3,
                   effect_expires_at=CASE WHEN $3::text IS NULL THEN NULL ELSE effect_expires_at END,
                   last_attack_at=to_timestamp($4 / 1000.0),
-                  psychosis_updated_at=to_timestamp($4 / 1000.0),
+                  psychosis_movement_ms=0,
                   updated_at=to_timestamp($4 / 1000.0)
             WHERE owner_did=$1`,
           [ownerDid, mass, attackerEffect, nowMs],
@@ -542,116 +514,110 @@ export async function actOnFarm(
           restarted: false,
         });
       } else {
-      const targetId = action.targetId;
-      if (!targetId) throw new Error("Invalid farm action");
-      const targetResult = await client.query<ActionPlayerRow & { handle: string | null }>(
-        `SELECT player.owner_did, player.player_id, player.x, player.y, player.facing,
-                player.mass, player.score, player.slop_eaten, player.health, player.knockouts,
-                player.status, player.effect, player.effect_expires_at, player.last_moved_at,
-                player.last_attack_at, player.psychosis_updated_at, player.updated_at,
-                account.handle
-           FROM farm_players player
-           JOIN accounts account ON account.did=player.owner_did
-          WHERE player.player_id=$1 AND player.owner_did<>$2
-          FOR UPDATE OF player`,
-        [targetId, ownerDid],
-      );
-      const storedTarget = targetResult.rows[0];
-      if (
-        !storedTarget
-        || storedTarget.status !== "alive"
-        || storedTarget.updated_at.getTime() <= nowMs - ONLINE_WINDOW_MS
-      ) {
-        throw new Error("That opponent is no longer in the battle");
-      }
-      const targetPsychosis = decayPsychosis({
-        mass: storedTarget.mass,
-        status: storedTarget.status,
-        psychosisUpdatedAtMs: storedTarget.psychosis_updated_at.getTime(),
-      }, nowMs);
-      const targetEffect = storedTarget.effect_expires_at?.getTime()
-        && storedTarget.effect_expires_at.getTime() > nowMs
-        ? storedTarget.effect
-        : null;
-      const distance = Math.hypot(row.x - storedTarget.x, row.y - storedTarget.y);
-      if (
-        distance > battleRange(
+        const targetId = action.targetId;
+        if (!targetId) throw new Error("Invalid farm action");
+        const targetResult = await client.query<ActionPlayerRow & { handle: string | null }>(
+          `SELECT player.owner_did, player.player_id, player.x, player.y, player.facing,
+                  player.mass, player.score, player.slop_eaten, player.health, player.knockouts,
+                  player.status, player.effect, player.effect_expires_at, player.last_moved_at,
+                  player.last_attack_at, player.psychosis_movement_ms, player.updated_at,
+                  account.handle
+             FROM farm_players player
+             JOIN accounts account ON account.did=player.owner_did
+            WHERE player.player_id=$1 AND player.owner_did<>$2
+            FOR UPDATE OF player`,
+          [targetId, ownerDid],
+        );
+        const storedTarget = targetResult.rows[0];
+        if (
+          !storedTarget
+          || storedTarget.status !== "alive"
+          || storedTarget.updated_at.getTime() <= nowMs - ONLINE_WINDOW_MS
+        ) {
+          throw new Error("That opponent is no longer in the battle");
+        }
+        const targetEffect = storedTarget.effect_expires_at?.getTime()
+          && storedTarget.effect_expires_at.getTime() > nowMs
+          ? storedTarget.effect
+          : null;
+        const distance = Math.hypot(row.x - storedTarget.x, row.y - storedTarget.y);
+        if (
+          distance > battleRange(
+            action.type,
+            { mass: row.mass, effect: attackerEffect },
+            { mass: storedTarget.mass },
+          )
+        ) {
+          throw new Error("That opponent is out of range");
+        }
+        const battle = resolveBattleAttack(
+          { mass: row.mass, health: row.health, status: row.status, effect: attackerEffect },
+          {
+            mass: storedTarget.mass,
+            health: storedTarget.health,
+            status: storedTarget.status,
+            effect: targetEffect,
+          },
           action.type,
-          { mass: row.mass, effect: attackerEffect },
-          { mass: targetPsychosis.mass },
-        )
-      ) {
-        throw new Error("That opponent is out of range");
-      }
-      const battle = resolveBattleAttack(
-        { mass: row.mass, health: row.health, status: row.status, effect: attackerEffect },
-        {
-          mass: targetPsychosis.mass,
-          health: storedTarget.health,
-          status: storedTarget.status,
-          effect: targetEffect,
-        },
-        action.type,
-      );
-      await client.query(
-        `UPDATE farm_players
-            SET mass=$2, status=$3, effect=$4,
-                effect_expires_at=CASE WHEN $4::text IS NULL THEN NULL ELSE effect_expires_at END,
-                knockouts=knockouts+$5, last_attack_at=to_timestamp($6 / 1000.0),
-                psychosis_updated_at=to_timestamp($6 / 1000.0),
-                updated_at=to_timestamp($6 / 1000.0),
-                popped_at=CASE WHEN $3='popped' THEN to_timestamp($6 / 1000.0) ELSE NULL END
-          WHERE owner_did=$1`,
-        [
-          ownerDid,
-          battle.attacker.mass,
-          battle.attacker.status,
-          battle.attacker.effect,
-          battle.targetDefeated ? 1 : 0,
+        );
+        await client.query(
+          `UPDATE farm_players
+              SET mass=$2, status=$3, effect=$4,
+                  effect_expires_at=CASE WHEN $4::text IS NULL THEN NULL ELSE effect_expires_at END,
+                  knockouts=knockouts+$5, last_attack_at=to_timestamp($6 / 1000.0),
+                  psychosis_movement_ms=0,
+                  updated_at=to_timestamp($6 / 1000.0),
+                  popped_at=CASE WHEN $3='popped' THEN to_timestamp($6 / 1000.0) ELSE NULL END
+            WHERE owner_did=$1`,
+          [
+            ownerDid,
+            battle.attacker.mass,
+            battle.attacker.status,
+            battle.attacker.effect,
+            battle.targetDefeated ? 1 : 0,
+            nowMs,
+          ],
+        );
+        await client.query(
+          `UPDATE farm_players
+              SET mass=$2, health=$3, status=$4, effect=$5,
+                  effect_expires_at=CASE WHEN $5::text IS NULL THEN NULL ELSE effect_expires_at END,
+                  updated_at=to_timestamp($6 / 1000.0),
+                  defeated_at=CASE WHEN $4='defeated' THEN to_timestamp($6 / 1000.0) ELSE NULL END,
+                  defeat_cause=CASE WHEN $4='defeated' THEN 'battle' ELSE NULL END
+            WHERE owner_did=$1`,
+          [
+            storedTarget.owner_did,
+            battle.target.mass,
+            battle.target.health,
+            battle.target.status,
+            battle.target.effect,
+            nowMs,
+          ],
+        );
+        events = [{
+          type: "battle_attack",
+          move: action.type,
+          targetName: storedTarget.handle ?? storedTarget.owner_did,
+          damage: battle.damage,
+          targetHealth: battle.target.health,
+          psychosisDelta: battle.psychosisDelta,
+          targetDefeated: battle.targetDefeated,
+        }];
+        if (battle.attackerPopped) events.push({ type: "popped" });
+        nextAchievementProgress = advanceAchievementProgress(achievementProgress, {
+          distance: 0,
+          movementElapsedMs: 0,
+          movedAtHighPsychosis: false,
           nowMs,
-        ],
-      );
-      await client.query(
-        `UPDATE farm_players
-            SET mass=$2, health=$3, status=$4, effect=$5,
-                effect_expires_at=CASE WHEN $5::text IS NULL THEN NULL ELSE effect_expires_at END,
-                psychosis_updated_at=to_timestamp($6 / 1000.0),
-                updated_at=to_timestamp($6 / 1000.0),
-                defeated_at=CASE WHEN $4='defeated' THEN to_timestamp($6 / 1000.0) ELSE NULL END,
-                defeat_cause=CASE WHEN $4='defeated' THEN 'battle' ELSE NULL END
-          WHERE owner_did=$1`,
-        [
-          storedTarget.owner_did,
-          battle.target.mass,
-          battle.target.health,
-          battle.target.status,
-          battle.target.effect,
-          nowMs,
-        ],
-      );
-      events = [{
-        type: "battle_attack",
-        move: action.type,
-        targetName: storedTarget.handle ?? storedTarget.owner_did,
-        damage: battle.damage,
-        targetHealth: battle.target.health,
-        psychosisDelta: battle.psychosisDelta,
-        targetDefeated: battle.targetDefeated,
-      }];
-      if (battle.attackerPopped) events.push({ type: "popped" });
-      nextAchievementProgress = advanceAchievementProgress(achievementProgress, {
-        distance: 0,
-        movementElapsedMs: 0,
-        movedAtHighPsychosis: false,
-        nowMs,
-        slopKind: null,
-        pointsGained: 0,
-        runScore: row.score,
-        runSlop: row.slop_eaten,
-        popped: battle.attackerPopped,
-        knockouts: battle.targetDefeated ? 1 : 0,
-        restarted: false,
-      });
+          slopKind: null,
+          pointsGained: 0,
+          runScore: row.score,
+          runSlop: row.slop_eaten,
+          popped: battle.attackerPopped,
+          knockouts: battle.targetDefeated ? 1 : 0,
+          restarted: false,
+        });
       }
     } else {
       const moved = movePlayer({
@@ -671,6 +637,15 @@ export async function actOnFarm(
         [nowMs],
       );
       const pickup = touchingSlop(moved, activeSlop.rows.map(mapSlop));
+      const distance = Math.hypot(moved.x - row.x, moved.y - row.y);
+      const movementElapsedMs = distance > 0
+        ? Math.max(0, Math.min(240, nowMs - row.last_moved_at.getTime()))
+        : 0;
+      const psychosis = decayPsychosis({
+        mass: moved.mass,
+        status: moved.status,
+        psychosisMovementMs: row.psychosis_movement_ms,
+      }, movementElapsedMs);
       let consumed: ReturnType<typeof applySlop> | null = null;
       if (pickup) {
         const deleted = await client.query(
@@ -679,7 +654,7 @@ export async function actOnFarm(
         );
         if (deleted.rowCount === 1) {
           consumed = applySlop({
-            mass: moved.mass,
+            mass: psychosis.mass,
             score: row.score,
             slopEaten: row.slop_eaten,
             status: moved.status,
@@ -690,18 +665,17 @@ export async function actOnFarm(
         }
       }
       const state = consumed?.player ?? {
-        mass: moved.mass,
+        mass: psychosis.mass,
         score: row.score,
         slopEaten: row.slop_eaten,
         status: moved.status,
         effect: moved.effect,
         effectExpiresAtMs: moved.effectExpiresAtMs,
       };
-      const distance = Math.hypot(moved.x - row.x, moved.y - row.y);
       const eaten = events.find(event => event.type === "slop_eaten");
       nextAchievementProgress = advanceAchievementProgress(achievementProgress, {
         distance,
-        movementElapsedMs: Math.max(0, Math.min(240, nowMs - row.last_moved_at.getTime())),
+        movementElapsedMs,
         movedAtHighPsychosis: row.status === "alive"
           && row.mass >= HIGH_PSYCHOSIS_MASS
           && distance > 0,
@@ -714,7 +688,7 @@ export async function actOnFarm(
         knockouts: 0,
         restarted: false,
       });
-      const psychosisUpdatedAtMs = consumed ? nowMs : row.psychosis_updated_at.getTime();
+      const psychosisMovementMs = consumed ? 0 : psychosis.psychosisMovementMs;
       await client.query(
         `UPDATE farm_players
             SET x=$2, y=$3, facing=$4, mass=$5, score=$6, slop_eaten=$7,
@@ -722,7 +696,7 @@ export async function actOnFarm(
                   WHEN $10::float8 IS NULL THEN NULL
                   ELSE to_timestamp($10 / 1000.0)
                 END,
-                psychosis_updated_at=to_timestamp($11 / 1000.0),
+                psychosis_movement_ms=$11,
                 last_moved_at=to_timestamp($12 / 1000.0),
                 updated_at=to_timestamp($12 / 1000.0),
                 popped_at=CASE WHEN $8='popped' THEN to_timestamp($12 / 1000.0) ELSE NULL END
@@ -738,7 +712,7 @@ export async function actOnFarm(
           state.status,
           state.effect,
           state.effectExpiresAtMs,
-          psychosisUpdatedAtMs,
+          psychosisMovementMs,
           nowMs,
         ],
       );

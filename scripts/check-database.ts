@@ -16,7 +16,9 @@ try {
     if (!applied.rows.some(row => row.name === name && row.checksum === checksum)) throw new Error("Schema mismatch");
   }
   await pool.query("SELECT id FROM hog_lives LIMIT 0");
-  await pool.query("SELECT player_id, health, knockouts, last_attack_at FROM farm_players LIMIT 0");
+  await pool.query(
+    "SELECT player_id, health, knockouts, last_attack_at, psychosis_movement_ms FROM farm_players LIMIT 0",
+  );
   await pool.query("SELECT id FROM farm_slop LIMIT 0");
   await pool.query("SELECT knockouts FROM farm_achievement_progress LIMIT 0");
   const policy = loadCostPolicy();

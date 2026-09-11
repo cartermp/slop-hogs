@@ -169,7 +169,7 @@ export interface MovablePlayer {
 export interface PsychosisState {
   mass: number;
   status: FarmPlayerStatus;
-  psychosisUpdatedAtMs: number;
+  psychosisMovementMs: number;
 }
 
 export interface BattleCombatant {
@@ -280,21 +280,23 @@ export function resolveBattleAttack(
   };
 }
 
-export function decayPsychosis<T extends PsychosisState>(player: T, nowMs: number): T {
+export function decayPsychosis<T extends PsychosisState>(player: T, movementMs: number): T {
   if (player.status !== "alive") return player;
   if (player.mass <= STARTING_MASS) {
-    return { ...player, mass: STARTING_MASS, psychosisUpdatedAtMs: nowMs };
+    return { ...player, mass: STARTING_MASS, psychosisMovementMs: 0 };
   }
-  const elapsedMs = Math.max(0, nowMs - player.psychosisUpdatedAtMs);
-  const decay = Math.floor(elapsedMs / PSYCHOSIS_DECAY_INTERVAL_MS);
-  if (decay === 0) return player;
+  const accumulatedMovementMs = player.psychosisMovementMs + Math.max(0, movementMs);
+  const decay = Math.floor(accumulatedMovementMs / PSYCHOSIS_DECAY_INTERVAL_MS);
+  if (decay === 0) {
+    return { ...player, psychosisMovementMs: accumulatedMovementMs };
+  }
   const mass = Math.max(STARTING_MASS, player.mass - decay);
   return {
     ...player,
     mass,
-    psychosisUpdatedAtMs: mass === STARTING_MASS
-      ? nowMs
-      : player.psychosisUpdatedAtMs + decay * PSYCHOSIS_DECAY_INTERVAL_MS,
+    psychosisMovementMs: mass === STARTING_MASS
+      ? 0
+      : accumulatedMovementMs % PSYCHOSIS_DECAY_INTERVAL_MS,
   };
 }
 
