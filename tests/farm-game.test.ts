@@ -6,6 +6,7 @@ import {
   POPPING_MASS,
   SLOP_CATALOG,
   applySlop,
+  decayPsychosis,
   hogDiameter,
   movePlayer,
   parseFarmAction,
@@ -74,6 +75,46 @@ test("movement is normalized, time-capped, effect-aware, and kept inside the far
   assert.equal(bounded.y, FARM_HEIGHT - radius);
 });
 
+test("movement becomes increasingly erratic above 50 percent psychosis", () => {
+  const halfwayMass = 24 + (POPPING_MASS - 24) / 2;
+  const calm = { ...player({ mass: halfwayMass }), lastMovedAtMs: NOW - 100 };
+  const calmMove = movePlayer(calm, { type: "move", dx: 1, dy: 0 }, NOW);
+  assert.equal(calmMove.y, calm.y);
+
+  const frantic = { ...player({ mass: 99 }), lastMovedAtMs: NOW - 100 };
+  const first = movePlayer(frantic, { type: "move", dx: 1, dy: 0 }, NOW);
+  const second = movePlayer(
+    { ...frantic, lastMovedAtMs: NOW + 20 },
+    { type: "move", dx: 1, dy: 0 },
+    NOW + 120,
+  );
+  assert.notEqual(first.y, frantic.y);
+  assert.notEqual(second.y - frantic.y, first.y - frantic.y);
+});
+
+test("psychosis decays over elapsed time without dropping below the starting level", () => {
+  const elevated = {
+    mass: 40,
+    status: "alive" as const,
+    psychosisUpdatedAtMs: NOW,
+  };
+  assert.deepEqual(decayPsychosis(elevated, NOW + 1_999), elevated);
+  assert.deepEqual(decayPsychosis(elevated, NOW + 4_500), {
+    ...elevated,
+    mass: 38,
+    psychosisUpdatedAtMs: NOW + 4_000,
+  });
+  assert.deepEqual(decayPsychosis(
+    { ...elevated, mass: 25 },
+    NOW + 10_000,
+  ), {
+    ...elevated,
+    mass: 24,
+    psychosisUpdatedAtMs: NOW + 10_000,
+  });
+  const popped = { ...elevated, mass: 100, status: "popped" as const };
+  assert.deepEqual(decayPsychosis(popped, NOW + 10_000), popped);
+});
 test("slop collision chooses the nearest pickup within the hog radius", () => {
   const near = { id: "near", kind: "premium_tokens" as const, x: 500, y: 288, expiresAtMs: NOW + 1_000 };
   const nearer = { id: "nearer", kind: "model_collapse" as const, x: 490, y: 288, expiresAtMs: NOW + 1_000 };

@@ -5,6 +5,7 @@ export const FARM_HEIGHT = 576;
 export const STARTING_MASS = 24;
 export const POPPING_MASS = 100;
 export const ONLINE_WINDOW_MS = 20_000;
+export const PSYCHOSIS_DECAY_INTERVAL_MS = 2_000;
 
 export const SLOP_KINDS = [
   "hallucinated_citation",
@@ -140,6 +141,12 @@ export interface MovablePlayer {
   lastMovedAtMs: number;
 }
 
+export interface PsychosisState {
+  mass: number;
+  status: FarmPlayerStatus;
+  psychosisUpdatedAtMs: number;
+}
+
 export function parseFarmAction(value: unknown): FarmAction {
   if (!value || typeof value !== "object" || Array.isArray(value)) {
     throw new Error("Invalid farm action");
@@ -162,6 +169,29 @@ export function hogDiameter(mass: number): number {
   return 30 + ((Math.min(POPPING_MASS, Math.max(STARTING_MASS, mass)) - STARTING_MASS) / 76) * 38;
 }
 
+export function psychosisLevel(mass: number): number {
+  return (Math.min(POPPING_MASS, Math.max(STARTING_MASS, mass)) - STARTING_MASS)
+    / (POPPING_MASS - STARTING_MASS);
+}
+
+export function decayPsychosis<T extends PsychosisState>(player: T, nowMs: number): T {
+  if (player.status === "popped") return player;
+  if (player.mass <= STARTING_MASS) {
+    return { ...player, mass: STARTING_MASS, psychosisUpdatedAtMs: nowMs };
+  }
+  const elapsedMs = Math.max(0, nowMs - player.psychosisUpdatedAtMs);
+  const decay = Math.floor(elapsedMs / PSYCHOSIS_DECAY_INTERVAL_MS);
+  if (decay === 0) return player;
+  const mass = Math.max(STARTING_MASS, player.mass - decay);
+  return {
+    ...player,
+    mass,
+    psychosisUpdatedAtMs: mass === STARTING_MASS
+      ? nowMs
+      : player.psychosisUpdatedAtMs + decay * PSYCHOSIS_DECAY_INTERVAL_MS,
+  };
+}
+
 export function movePlayer<T extends MovablePlayer>(
   player: T,
   action: Extract<FarmAction, { type: "move" }>,
@@ -177,14 +207,23 @@ export function movePlayer<T extends MovablePlayer>(
       : activeEffect === "glitchy" ? 0.78
         : 1;
   const fatSpeed = Math.max(0.52, 1 - (player.mass - STARTING_MASS) / 150);
-  const distance = 0.095 * elapsedMs * effectSpeed * fatSpeed;
+  const chaos = Math.max(0, (psychosisLevel(player.mass) - 0.5) * 2);
+  const wobble = chaos * (
+    Math.sin(nowMs / 83 + player.x * 0.031 + player.y * 0.047) * 1.05
+    + Math.sin(nowMs / 31) * 0.4
+  );
+  const stutter = 1 - chaos * 0.3 * (0.5 + 0.5 * Math.sin(nowMs / 47 + player.y));
+  const distance = 0.095 * elapsedMs * effectSpeed * fatSpeed * stutter;
   const magnitude = Math.hypot(action.dx, action.dy);
+  const intendedAngle = Math.atan2(action.dy / magnitude, action.dx / magnitude);
+  const dx = Math.cos(intendedAngle + wobble);
+  const dy = Math.sin(intendedAngle + wobble);
   const radius = hogDiameter(player.mass) / 2;
   return {
     ...player,
-    x: Math.max(radius, Math.min(FARM_WIDTH - radius, player.x + action.dx / magnitude * distance)),
-    y: Math.max(radius, Math.min(FARM_HEIGHT - radius, player.y + action.dy / magnitude * distance)),
-    facing: action.dx < 0 ? "left" : action.dx > 0 ? "right" : player.facing,
+    x: Math.max(radius, Math.min(FARM_WIDTH - radius, player.x + dx * distance)),
+    y: Math.max(radius, Math.min(FARM_HEIGHT - radius, player.y + dy * distance)),
+    facing: dx < 0 ? "left" : dx > 0 ? "right" : player.facing,
     effect: activeEffect,
     effectExpiresAtMs: activeEffect ? player.effectExpiresAtMs : null,
     lastMovedAtMs: nowMs,

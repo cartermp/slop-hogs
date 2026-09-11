@@ -1,9 +1,11 @@
 import { cookies } from "next/headers";
 import { parseFarmAction } from "@/lib/farm-game";
 import { requireSameOriginSession } from "@/lib/server/action-auth";
+import { resolveBlueskyHandle } from "@/lib/server/actors";
+import { loadCostPolicy } from "@/lib/server/cost-policy";
 import { getDatabase } from "@/lib/server/database";
 import { actOnFarm, syncFarm } from "@/lib/server/farm";
-import { getAccountSession } from "@/lib/server/hogs";
+import { getAccountSession, setAccountHandle } from "@/lib/server/hogs";
 import { logOperationalEvent } from "@/lib/server/logging";
 import { ReadOnlyError } from "@/lib/server/operations";
 
@@ -19,6 +21,10 @@ export async function GET() {
     return Response.json({ error: "Sign in to enter the farm" }, { status: 401 });
   }
   try {
+    if (!session.handle) {
+      const handle = await resolveBlueskyHandle(session.ownerDid, loadCostPolicy().limits);
+      await setAccountHandle(getDatabase(), session.ownerDid, handle);
+    }
     const snapshot = await syncFarm(getDatabase(), session.ownerDid);
     return Response.json(
       { snapshot, events: [] },

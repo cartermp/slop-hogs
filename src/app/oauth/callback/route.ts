@@ -1,4 +1,6 @@
 import { NextResponse } from "next/server";
+import { resolveBlueskyHandle } from "@/lib/server/actors";
+import { loadCostPolicy } from "@/lib/server/cost-policy";
 import { getDatabase } from "@/lib/server/database";
 import { completeOAuthSignIn } from "@/lib/server/hogs";
 import { loadOAuthConfig } from "@/lib/server/oauth-config";
@@ -35,7 +37,8 @@ export async function GET(request: Request) {
     const client = await getOAuthClient();
     ({ session: oauthSession } = await client.callback(requestUrl.searchParams));
     event.add({ actor_did: oauthSession.did });
-    const appSession = await completeOAuthSignIn(getDatabase(), oauthSession.did);
+    const handle = await resolveBlueskyHandle(oauthSession.did, loadCostPolicy().limits);
+    const appSession = await completeOAuthSignIn(getDatabase(), oauthSession.did, handle);
     const response = NextResponse.redirect(new URL("/?signed_in=1", config.origin), 303);
     response.cookies.set(cookieName, appSession.token, {
       httpOnly: true,
