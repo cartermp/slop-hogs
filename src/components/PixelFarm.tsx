@@ -2,6 +2,7 @@
 
 import { useCallback, useEffect, useRef, useState } from "react";
 import { AchievementCabinet } from "@/components/AchievementCabinet";
+import { FeedbackLinks } from "@/components/FeedbackLinks";
 import { ACHIEVEMENT_BY_ID } from "@/lib/achievements";
 import {
   FARM_HEIGHT,
@@ -227,6 +228,7 @@ export function PixelFarm() {
           <form action="/oauth/logout" method="post">
             <button type="submit">[ SIGN OUT ]</button>
           </form>
+          <FeedbackLinks variant="game" />
         </div>
       </header>
 

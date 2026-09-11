@@ -64,6 +64,24 @@
   cursor: pointer;
 }
 
+.feedback-links {
+  display: flex;
+  flex-wrap: wrap;
+  justify-content: center;
+  gap: 8px 16px;
+}
+.feedback-links a {
+  color: #f8c7d5;
+  text-decoration-thickness: 2px;
+  text-underline-offset: 4px;
+}
+.feedback-links a:hover,
+.feedback-links a:focus-visible { color: var(--lime); }
+.feedback-links-game {
+  justify-content: flex-end;
+  font: 10px/1.5 var(--pixel);
+}
+
 .online-dot {
   display: inline-block;
   width: 9px;
@@ -768,6 +786,10 @@
   background: #c8e85a;
   font: 8px/1.4 var(--pixel);
   box-shadow: 4px 4px 0 #a52f5b;
+}
+.feedback-links-login {
+  margin-top: 22px;
+  font: 10px/1.5 var(--pixel);
 }
 .terminal-notice { color: #8aff7b; font: 18px var(--terminal); }
 .terminal-error { color: #ff7694; }
