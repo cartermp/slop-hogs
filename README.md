@@ -1,11 +1,13 @@
 # Slop Hogs
 
-A Bluesky-linked virtual pet with a terrible diet. Built by one developer and Codex in small asynchronous tasks.
+A retro multiplayer farm game where Bluesky-linked pixel hogs roam together,
+eat short-lived AI slop, grow dangerously large, and eventually pop from AI
+psychosis. Movement uses WASD, arrow keys, or the on-screen directional pad.
 
-SH-012 playtest preflight makes each hog's lifetime favorite, recent six-meal
-diet, and ending-relevant stats visible so the owner can pursue a build
-deliberately. The [owner playtest protocol](docs/playtest.md) is ready, but
-the live Railway gate and playtest session still require owner execution.
+The farm is server-authoritative and persisted in PostgreSQL. Player movement,
+pickup claims, timed slop expiration, effects, popping, and restarting are
+synchronized through `/api/farm`; the existing Bluesky login remains the
+identity boundary.
 
 ## Run locally
 
@@ -19,7 +21,9 @@ npm run dev
 
 If you use nvm and need to install the pinned default, run `nvm install` and `nvm use` first.
 
-Open http://localhost:3000. The shell and local gallery do not require a provider account. Public pens are viewable without signing in; managing a pen, sending treats, and public-post feeding require the PostgreSQL and OAuth configuration below.
+Open http://localhost:3000. The title screen does not require a provider
+account. Entering the shared farm requires PostgreSQL and Bluesky OAuth
+configuration.
 
 In development, open http://localhost:3000/gallery to compare the mutation-composed six-meal AI image, generated post, chatbot screenshot, human post, and shitpost builds. The gallery returns a normal not-found page in production.
 

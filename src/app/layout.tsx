@@ -1,9 +1,10 @@
 import type { Metadata } from "next";
 import "./globals.css";
+import "./farm.css";
 
 export const metadata: Metadata = {
   title: "Slop Hogs",
-  description: "A small pig with a terrible appetite. A virtual pet game in the making.",
+  description: "A retro multiplayer farm game about hogs, AI slop, and getting dangerously large.",
   robots: { index: false, follow: false },
 };
 

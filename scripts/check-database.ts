@@ -16,6 +16,8 @@ try {
     if (!applied.rows.some(row => row.name === name && row.checksum === checksum)) throw new Error("Schema mismatch");
   }
   await pool.query("SELECT id FROM hog_lives LIMIT 0");
+  await pool.query("SELECT player_id FROM farm_players LIMIT 0");
+  await pool.query("SELECT id FROM farm_slop LIMIT 0");
   const policy = loadCostPolicy();
   await expirePostPreviews(pool);
   const status = await transaction(pool, client => refreshOperationalStatus(client, {
