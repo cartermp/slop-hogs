@@ -23,6 +23,7 @@ import {
 } from "@/lib/farm-game";
 
 type Direction = "up" | "down" | "left" | "right";
+type BattleEffect = { id: number; move: BattleMove };
 
 const movementKeys: ReadonlyMap<string, Direction> = new Map([
   ["w", "up"],
@@ -49,10 +50,12 @@ function isFarmResult(value: unknown): value is FarmActionResult {
 function PixelHog({
   player,
   targeted,
+  battleEffect,
   onTarget,
 }: {
   player: FarmPlayer;
   targeted: boolean;
+  battleEffect?: BattleEffect;
   onTarget?: () => void;
 }) {
   const diameter = hogDiameter(player.mass);
@@ -88,7 +91,10 @@ function PixelHog({
       </span>
       <span className="player-name">{player.name}{player.isYou ? " (YOU)" : ""}</span>
       {effectLabel && <span className="effect-bubble">{effectLabel}</span>}
-      <div className={`pixel-hog facing-${player.facing}`}>
+      <div
+        key={battleEffect?.id ?? 0}
+        className={`pixel-hog facing-${player.facing}${battleEffect ? ` action-${battleEffect.move}` : ""}`}
+      >
         <i className="hog-tail-pixel" />
         <i className="hog-ear-pixel" />
         <i className="hog-body-pixel" />
@@ -97,6 +103,15 @@ function PixelHog({
         <i className="hog-leg-pixel leg-one" />
         <i className="hog-leg-pixel leg-two" />
       </div>
+      {battleEffect && (
+        <span
+          key={`effect-${battleEffect.id}`}
+          className={`battle-effect ${battleEffect.move}-effect effect-facing-${player.facing}`}
+          aria-hidden="true"
+        >
+          <i /><i /><i /><i /><b>{battleEffect.move === "bite" ? "CHOMP!" : "PFFT!"}</b>
+        </span>
+      )}
     </>
   );
   if (onTarget) {
@@ -150,9 +165,30 @@ export function PixelFarm() {
   const [notice, setNotice] = useState("Select a hog, close the gap, then Bite or Fart.");
   const [error, setError] = useState<string | null>(null);
   const [targetId, setTargetId] = useState<string | null>(null);
+  const [battleEffect, setBattleEffect] = useState<BattleEffect | null>(null);
   const keys = useRef(new Set<Direction>());
   const requestInFlight = useRef(false);
   const latestServerTime = useRef(0);
+  const battleEffectId = useRef(0);
+  const battleEffectTimeout = useRef<number | null>(null);
+
+  const triggerBattleEffect = useCallback((move: BattleMove) => {
+    battleEffectId.current += 1;
+    setBattleEffect({ id: battleEffectId.current, move });
+    if (battleEffectTimeout.current !== null) {
+      window.clearTimeout(battleEffectTimeout.current);
+    }
+    battleEffectTimeout.current = window.setTimeout(() => {
+      setBattleEffect(null);
+      battleEffectTimeout.current = null;
+    }, 900);
+  }, []);
+
+  useEffect(() => () => {
+    if (battleEffectTimeout.current !== null) {
+      window.clearTimeout(battleEffectTimeout.current);
+    }
+  }, []);
 
   const acceptResult = useCallback((result: FarmActionResult, showEvents: boolean) => {
     if (result.snapshot.serverNowMs >= latestServerTime.current) {
@@ -285,7 +321,7 @@ export function PixelFarm() {
     }
   }
 
-  async function attack(move: BattleMove) {
+  const attack = useCallback(async (move: BattleMove) => {
     if (requestInFlight.current || !ownHog || ownHog.status !== "alive") return;
     const target = selectedTarget;
     let action: FarmAction;
@@ -299,6 +335,7 @@ export function PixelFarm() {
     }
     requestInFlight.current = true;
     keys.current.clear();
+    triggerBattleEffect(move);
     try {
       await requestFarm(action);
     } catch (failure) {
@@ -306,7 +343,24 @@ export function PixelFarm() {
     } finally {
       requestInFlight.current = false;
     }
-  }
+  }, [canBite, canFartHit, ownHog, requestFarm, selectedTarget, triggerBattleEffect]);
+
+  useEffect(() => {
+    const useBattleHotkey = (event: KeyboardEvent) => {
+      if (event.repeat || event.altKey || event.ctrlKey || event.metaKey) return;
+      const target = event.target;
+      if (
+        target instanceof HTMLElement
+        && (target.isContentEditable || target.matches("input, textarea, select"))
+      ) return;
+      const move = event.key === "1" ? "bite" : event.key === "2" ? "fart" : null;
+      if (!move) return;
+      event.preventDefault();
+      void attack(move);
+    };
+    window.addEventListener("keydown", useBattleHotkey, { passive: false });
+    return () => window.removeEventListener("keydown", useBattleHotkey);
+  }, [attack]);
 
   return (
     <main className="game-shell">
@@ -370,6 +424,7 @@ export function PixelFarm() {
                 key={player.id}
                 player={player}
                 targeted={player.id === selectedTarget?.id}
+                battleEffect={player.isYou ? battleEffect ?? undefined : undefined}
                 onTarget={!player.isYou && player.status === "alive"
                   ? () => setTargetId(player.id)
                   : undefined}
@@ -405,23 +460,25 @@ export function PixelFarm() {
             <span>TARGET: {selectedTarget?.name ?? "NO HOG"}</span>
             <button
               type="button"
-              title="Heavy hit; adds 7 psychosis"
+              title="Press 1: heavy hit; adds 7 psychosis"
+              aria-keyshortcuts="1"
               onClick={() => attack("bite")}
               disabled={!canBite || requestInFlight.current}
             >
-              [ BITE +7 PSI ]
+              [ 1 BITE +7 PSI ]
             </button>
             <button
               type="button"
-              title="Always releases up to 10 psychosis; also hits a target in range"
+              title="Press 2: always releases up to 10 psychosis; also hits a target in range"
+              aria-keyshortcuts="2"
               onClick={() => attack("fart")}
               disabled={!ownHog || ownHog.status !== "alive" || requestInFlight.current}
             >
-              [ FART -10 PSI ]
+              [ 2 FART -10 PSI ]
             </button>
           </div>
           <div className="controls-copy">
-            <span>MOVE</span> WASD / ARROW KEYS
+            <span>MOVE</span> WASD / ARROWS // <span>ATTACK</span> 1 / 2
           </div>
           <div className="d-pad" aria-label="Touch movement controls">
             <button
