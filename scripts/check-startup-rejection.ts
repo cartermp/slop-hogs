@@ -21,7 +21,12 @@ try {
   });
   assert.ifError(result.error);
   assert.equal(result.status, 1, result.stdout + result.stderr);
-  assert.match(result.stderr, /Invalid cost policy\. Refusing startup\./);
+  const event = JSON.parse(result.stderr.trim());
+  assert.equal(event.event, "server.activity");
+  assert.equal(event.activity, "service.startup");
+  assert.equal(event.outcome, "failure");
+  assert.equal(event.startup_stage, "cost_policy_validation");
+  assert.equal(event.error_message, "Paid AI budget must be zero");
   console.log("Direct Next production startup terminates for unsafe policy.");
 } finally {
   rmSync(directory, { recursive: true, force: true });

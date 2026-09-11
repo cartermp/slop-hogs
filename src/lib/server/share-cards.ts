@@ -400,8 +400,7 @@ export async function requestShareCard(
       || error instanceof CardRenderBusyError
       || (error instanceof Error && error.message === "Unauthorized")
     ) throw error;
-    console.error(`Share-card render failed: ${error instanceof Error ? error.message : "unknown error"}`);
-    throw new CardUnavailableError("The share card could not be rendered. Try again.");
+    throw new CardUnavailableError("The share card could not be rendered. Try again.", { cause: error });
   } finally {
     renderBusy = false;
   }

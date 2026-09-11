@@ -14,6 +14,7 @@ import { BLUESKY_PUBLIC_API } from "../bluesky-handles.ts";
 import { getDatabase } from "./database.ts";
 import { requestSource, reserveHourlyAttempt } from "./hourly-rate-limit.ts";
 import { loadCostPolicy } from "./cost-policy.ts";
+import { logOperationalEvent } from "./logging.ts";
 import { createClientMetadata, loadOAuthConfig, type OAuthConfig } from "./oauth-config.ts";
 
 const oauthGlobal = globalThis as typeof globalThis & { slopHogsOAuthClient?: Promise<NodeOAuthClient> };
@@ -114,8 +115,9 @@ function createRequestLock(pool: Pool): RuntimeLock {
       try {
         await pool.query("DELETE FROM oauth_locks WHERE lock_hash=$1 AND owner_token=$2", [lockHash, ownerToken]);
       } catch (error) {
-        const message = error instanceof Error ? error.message : "Unknown lock cleanup failure";
-        console.error(`OAuth lock cleanup failed: ${message}`);
+        logOperationalEvent("oauth.lock.cleanup", "failure", {
+          lock_hash: lockHash,
+        }, error);
       }
     }
   };
