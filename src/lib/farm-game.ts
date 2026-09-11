@@ -1,3 +1,5 @@
+import type { AchievementState } from "./achievements.ts";
+
 export const FARM_WIDTH = 960;
 export const FARM_HEIGHT = 576;
 export const STARTING_MASS = 24;
@@ -109,6 +111,7 @@ export interface FarmSnapshot {
   serverNowMs: number;
   players: FarmPlayer[];
   slop: FarmSlop[];
+  achievements: AchievementState;
 }
 
 export type FarmAction =
@@ -118,7 +121,8 @@ export type FarmAction =
 export type FarmEvent =
   | { type: "slop_eaten"; kind: SlopKind; massGained: number; pointsGained: number }
   | { type: "popped" }
-  | { type: "restarted" };
+  | { type: "restarted" }
+  | { type: "achievements_unlocked"; achievementIds: string[] };
 
 export interface FarmActionResult {
   snapshot: FarmSnapshot;

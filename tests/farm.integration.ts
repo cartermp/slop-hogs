@@ -29,7 +29,10 @@ test("the shared farm persists players, claims slop once, pops, and restarts", a
     );
     now += 100;
     const ate = await actOnFarm(pool, dids[0], { type: "move", dx: 1, dy: 0 }, now);
-    assert.deepEqual(ate.events.map(event => event.type), ["slop_eaten"]);
+    assert.deepEqual(ate.events.map(event => event.type), ["slop_eaten", "achievements_unlocked"]);
+    assert.ok(ate.snapshot.achievements.unlocks.some(unlock => unlock.id === "slop-1"));
+    assert.ok(ate.snapshot.achievements.unlocks.some(unlock => unlock.id === "score-1"));
+    assert.equal(ate.snapshot.achievements.progress.kindCounts.premium_tokens, 1);
     assert.equal(ate.snapshot.players.find(player => player.isYou)?.mass, 31);
 
     await pool.query("DELETE FROM farm_slop");
@@ -72,13 +75,16 @@ test("the shared farm persists players, claims slop once, pops, and restarts", a
     );
     now += 200;
     const popped = await actOnFarm(pool, dids[0], { type: "move", dx: -1, dy: 0 }, now);
-    assert.deepEqual(popped.events.map(event => event.type), ["slop_eaten", "popped"]);
+    assert.deepEqual(popped.events.slice(0, 2).map(event => event.type), ["slop_eaten", "popped"]);
     assert.equal(popped.snapshot.players.find(player => player.isYou)?.status, "popped");
+    assert.equal(popped.snapshot.achievements.progress.pops, 1);
 
     now += 1;
     const restarted = await actOnFarm(pool, dids[0], { type: "restart" }, now);
     const fresh = restarted.snapshot.players.find(player => player.isYou)!;
-    assert.deepEqual(restarted.events, [{ type: "restarted" }]);
+    assert.equal(restarted.events[0].type, "restarted");
+    assert.ok(restarted.snapshot.achievements.unlocks.some(unlock => unlock.id === "run-1"));
+    assert.equal(restarted.snapshot.achievements.progress.runs, 2);
     assert.equal(fresh.status, "alive");
     assert.equal(fresh.mass, 24);
     assert.equal(fresh.score, 0);
