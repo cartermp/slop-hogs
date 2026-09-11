@@ -21,7 +21,7 @@ export async function GET() {
     return Response.json({ error: "Sign in to enter the farm" }, { status: 401 });
   }
   try {
-    if (!session.handle) {
+    if (!session.handle && session.authProvider === "bluesky") {
       const handle = await resolveBlueskyHandle(session.ownerDid, loadCostPolicy().limits);
       await setAccountHandle(getDatabase(), session.ownerDid, handle);
     }

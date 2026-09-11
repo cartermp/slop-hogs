@@ -85,80 +85,88 @@ export function LoginForm() {
   }
 
   return (
-    <form className="login-form" action="/oauth/login" method="post">
-      <div className="login-row">
-        <div
-          className="handle-combobox"
-          onBlur={event => {
-            if (!event.currentTarget.contains(event.relatedTarget)) setOpen(false);
-          }}
-        >
-          <input
-            id="handle"
-            name="handle"
-            placeholder="you.bsky.social"
-            autoComplete="username"
-            autoCapitalize="none"
-            spellCheck={false}
-            required
-            aria-label="Bluesky handle"
-            maxLength={253}
-            role="combobox"
-            aria-autocomplete="list"
-            aria-expanded={open}
-            aria-controls={listboxId}
-            aria-activedescendant={activeIndex >= 0 ? `${listboxId}-${activeIndex}` : undefined}
-            value={handle}
-            onChange={event => {
-              selectedHandle.current = null;
-              setHandle(event.target.value);
+    <div className="login-options">
+      <form className="login-form" action="/oauth/login" method="post">
+        <div className="login-row">
+          <div
+            className="handle-combobox"
+            onBlur={event => {
+              if (!event.currentTarget.contains(event.relatedTarget)) setOpen(false);
             }}
-            onFocus={() => setOpen(suggestions.length > 0)}
-            onKeyDown={event => {
-              if (!open || suggestions.length === 0) return;
-              if (event.key === "ArrowDown") {
-                event.preventDefault();
-                setActiveIndex(index => (index + 1) % suggestions.length);
-              } else if (event.key === "ArrowUp") {
-                event.preventDefault();
-                setActiveIndex(index => (index <= 0 ? suggestions.length - 1 : index - 1));
-              } else if (event.key === "Enter" && activeIndex >= 0) {
-                event.preventDefault();
-                chooseSuggestion(suggestions[activeIndex]);
-              } else if (event.key === "Escape") {
-                setOpen(false);
-              }
-            }}
-          />
-          {open && (
-            <div className="handle-suggestions" id={listboxId} role="listbox">
-              {suggestions.map((suggestion, index) => (
-                <button
-                  id={`${listboxId}-${index}`}
-                  className={index === activeIndex ? "handle-suggestion active" : "handle-suggestion"}
-                  type="button"
-                  role="option"
-                  aria-selected={index === activeIndex}
-                  key={suggestion.did}
-                  onMouseDown={event => event.preventDefault()}
-                  onMouseEnter={() => setActiveIndex(index)}
-                  onClick={() => chooseSuggestion(suggestion)}
-                >
-                  <span>{suggestion.displayName || suggestion.handle}</span>
-                  <small>@{suggestion.handle}</small>
-                </button>
-              ))}
-            </div>
-          )}
-          <p className="handle-search-status" aria-live="polite">{status}</p>
+          >
+            <input
+              id="handle"
+              name="handle"
+              placeholder="you.bsky.social"
+              autoComplete="username"
+              autoCapitalize="none"
+              spellCheck={false}
+              required
+              aria-label="Bluesky handle"
+              maxLength={253}
+              role="combobox"
+              aria-autocomplete="list"
+              aria-expanded={open}
+              aria-controls={listboxId}
+              aria-activedescendant={activeIndex >= 0 ? `${listboxId}-${activeIndex}` : undefined}
+              value={handle}
+              onChange={event => {
+                selectedHandle.current = null;
+                setHandle(event.target.value);
+              }}
+              onFocus={() => setOpen(suggestions.length > 0)}
+              onKeyDown={event => {
+                if (!open || suggestions.length === 0) return;
+                if (event.key === "ArrowDown") {
+                  event.preventDefault();
+                  setActiveIndex(index => (index + 1) % suggestions.length);
+                } else if (event.key === "ArrowUp") {
+                  event.preventDefault();
+                  setActiveIndex(index => (index <= 0 ? suggestions.length - 1 : index - 1));
+                } else if (event.key === "Enter" && activeIndex >= 0) {
+                  event.preventDefault();
+                  chooseSuggestion(suggestions[activeIndex]);
+                } else if (event.key === "Escape") {
+                  setOpen(false);
+                }
+              }}
+            />
+            {open && (
+              <div className="handle-suggestions" id={listboxId} role="listbox">
+                {suggestions.map((suggestion, index) => (
+                  <button
+                    id={`${listboxId}-${index}`}
+                    className={index === activeIndex ? "handle-suggestion active" : "handle-suggestion"}
+                    type="button"
+                    role="option"
+                    aria-selected={index === activeIndex}
+                    key={suggestion.did}
+                    onMouseDown={event => event.preventDefault()}
+                    onMouseEnter={() => setActiveIndex(index)}
+                    onClick={() => chooseSuggestion(suggestion)}
+                  >
+                    <span>{suggestion.displayName || suggestion.handle}</span>
+                    <small>@{suggestion.handle}</small>
+                  </button>
+                ))}
+              </div>
+            )}
+            <p className="handle-search-status" aria-live="polite">{status}</p>
+          </div>
+          <button
+            className="auth-button"
+            type="submit"
+          >
+            Sign in with Bluesky
+          </button>
         </div>
-        <button
-          className="auth-button"
-          type="submit"
-        >
-          Sign in with Bluesky
+      </form>
+      <p className="login-divider"><span>or</span></p>
+      <form className="github-login-form" action="/oauth/github/login" method="post">
+        <button className="auth-button github-auth-button" type="submit">
+          Sign in with GitHub
         </button>
-      </div>
-    </form>
+      </form>
+    </div>
   );
 }

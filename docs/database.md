@@ -38,10 +38,12 @@ Migrations run explicitly, never on web startup or build. Numbered SQL files are
 Migration 010 adds per-account farm achievement telemetry and immutable unlock
 rows. It backfills the totals still available on each persistent farm avatar;
 per-slop-kind and movement history begin at deployment because migration 009
-did not retain those historical events.
+did not retain those historical events. Migration 015 records whether each
+account identity was verified by Bluesky or GitHub; existing accounts are
+backfilled as Bluesky accounts.
 
 Each application pool allows four connections, with finite connection, lock, query, and idle transaction timeouts. Reuse one pool per process when HTTP routes arrive. The transaction helper holds one client for BEGIN through COMMIT, as required by the [pg transaction API](https://node-postgres.com/features/transactions). `operational_status` stores the latest bounded database-size measurement and enforced growth state. `backup_restore_checks` records only the latest synthetic challenge and successful restore timestamp; it contains no player or provider secrets.
 
-Only SHA-256 hashes of random 256-bit application-session tokens are stored. Cookies are HttpOnly, SameSite=Lax, HTTPS-only in production, expire after seven days, and are revoked on logout or a newer login. OAuth SDK state expires after ten minutes; provider tokens and DPoP keys are encrypted with AES-256-GCM under `OAUTH_ENCRYPTION_KEY`. No browser receives provider tokens or database credentials. Action receipts hold the resulting state and ordered events atomically, without source post content.
+Only SHA-256 hashes of random 256-bit application-session tokens are stored. Cookies are HttpOnly, SameSite=Lax, HTTPS-only in production, expire after seven days, and are revoked on logout or a newer login. Bluesky OAuth SDK state expires after ten minutes; provider tokens and DPoP keys are encrypted with AES-256-GCM under `OAUTH_ENCRYPTION_KEY`. GitHub OAuth state uses a separate ten-minute HttpOnly callback cookie, and its provider token is discarded immediately after the verified user lookup. No browser receives provider tokens or database credentials. Action receipts hold the resulting state and ordered events atomically, without source post content.
 
 No Railway resources are created here. CI starts a temporary PostgreSQL service within each existing ten-minute job. The only new runtime package is `pg`; its TypeScript declarations are development-only.

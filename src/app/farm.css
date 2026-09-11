@@ -913,7 +913,8 @@
   border-block: 3px solid #513546;
   padding: 22px 0;
 }
-.terminal-auth .login-form { max-width: 580px; margin: 0 auto; text-align: left; }
+.terminal-auth .login-options { max-width: 580px; margin: 0 auto; }
+.terminal-auth .login-form { margin: 0; text-align: left; }
 .terminal-auth .login-row {
   align-items: stretch;
   gap: 10px;
@@ -933,6 +934,14 @@
   background: #c8e85a;
   font: 8px/1.4 var(--pixel);
   box-shadow: 4px 4px 0 #a52f5b;
+}
+.terminal-auth .github-auth-button {
+  background: #f2edf0;
+  color: #171216;
+}
+.terminal-auth .login-divider {
+  margin: 14px 0;
+  font: 8px/1 var(--pixel);
 }
 .feedback-links-login {
   margin-top: 22px;

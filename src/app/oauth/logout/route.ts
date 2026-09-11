@@ -21,17 +21,21 @@ export async function POST(request: NextRequest) {
       return new Response("Forbidden", { status: 403 });
     }
     const token = request.cookies.get(cookieName)?.value;
-    const ownerDid = token ? await revokeSession(getDatabase(), token) : null;
-    event.add({ actor_did: ownerDid, local_session_found: ownerDid !== null });
+    const revokedSession = token ? await revokeSession(getDatabase(), token) : null;
+    event.add({
+      actor_did: revokedSession?.ownerDid,
+      auth_provider: revokedSession?.authProvider,
+      local_session_found: revokedSession !== null,
+    });
     let providerError = false;
     let providerFailure: unknown;
-    if (ownerDid) {
+    if (revokedSession?.authProvider === "bluesky") {
       try {
-        await (await getOAuthClient()).revoke(ownerDid);
+        await (await getOAuthClient()).revoke(revokedSession.ownerDid);
       } catch (error) {
         providerError = true;
         providerFailure = error;
-        await deleteOAuthSession(ownerDid);
+        await deleteOAuthSession(revokedSession.ownerDid);
       }
     }
     const response = NextResponse.redirect(
@@ -47,8 +51,10 @@ export async function POST(request: NextRequest) {
     });
     event.emit(providerError ? "failure" : "success", {
       http_status: 303,
-      local_session_revoked: ownerDid !== null,
-      provider_revoke_outcome: ownerDid ? (providerError ? "failure" : "success") : "not_needed",
+      local_session_revoked: revokedSession !== null,
+      provider_revoke_outcome: revokedSession?.authProvider === "bluesky"
+        ? (providerError ? "failure" : "success")
+        : "not_needed",
     }, providerFailure);
     return response;
   } catch (error) {

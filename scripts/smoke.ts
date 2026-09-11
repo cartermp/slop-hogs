@@ -44,6 +44,7 @@ try {
   assert.match(html, /Slop Hogs/);
   assert.match(html, /SLOP SYSTEMS PRESENTS/);
   assert.match(html, /Sign in with Bluesky/);
+  assert.match(html, /Sign in with GitHub/);
   const issueLinks = [...html.matchAll(/href="(https:\/\/github\.com\/cartermp\/slop-hogs\/issues\/new\?[^"]+)"/g)]
     .map(match => new URL(match[1].replaceAll("&amp;", "&")));
   assert.equal(issueLinks.length, 2);

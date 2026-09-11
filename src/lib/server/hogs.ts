@@ -14,6 +14,7 @@ import { isValidBlueskyHandle } from "../bluesky-handles.ts";
 import { loadCostPolicy } from "./cost-policy.ts";
 import { transaction } from "./database.ts";
 import { isValidDid } from "./dids.ts";
+import { isValidGitHubLogin } from "./github-oauth.ts";
 import { recordLifeEnding } from "./lifecycle.ts";
 import { ReadOnlyError, refreshOperationalStatusForPool, type OperationalPolicy } from "./operations.ts";
 
@@ -65,10 +66,13 @@ export interface AppSession {
   hogId: string;
 }
 
+export type AuthProvider = "bluesky" | "github";
+
 export interface AccountSession {
   ownerDid: string;
   hogId: string | null;
   handle: string | null;
+  authProvider: AuthProvider;
 }
 
 export interface HogView extends AppSession {
@@ -77,8 +81,13 @@ export interface HogView extends AppSession {
 
 export async function getAccountSession(pool: Pool, token: string): Promise<AccountSession | null> {
   if (!sessionToken.test(token)) return null;
-  const result = await pool.query<{ owner_did: string; hog_id: string | null; handle: string | null }>(
-    `SELECT session.owner_did, hog.id AS hog_id, account.handle
+  const result = await pool.query<{
+    owner_did: string;
+    hog_id: string | null;
+    handle: string | null;
+    auth_provider: AuthProvider;
+  }>(
+    `SELECT session.owner_did, hog.id AS hog_id, account.handle, account.auth_provider
        FROM app_sessions session
        JOIN accounts account ON account.did=session.owner_did
        LEFT JOIN hog_lives hog ON hog.owner_did=session.owner_did AND hog.ended_at IS NULL
@@ -90,6 +99,7 @@ export async function getAccountSession(pool: Pool, token: string): Promise<Acco
     ownerDid: result.rows[0].owner_did,
     hogId: result.rows[0].hog_id,
     handle: result.rows[0].handle,
+    authProvider: result.rows[0].auth_provider,
   };
 }
 
@@ -133,31 +143,41 @@ export async function getHogView(pool: Pool, token: string): Promise<HogView | n
   };
 }
 
-export async function revokeSession(pool: Pool, token: string): Promise<string | null> {
-  if (!sessionToken.test(token)) return null;
-  const result = await pool.query<{ owner_did: string }>(
-    "DELETE FROM app_sessions WHERE token_hash=$1 RETURNING owner_did",
-    [hash(token)],
-  );
-  return result.rows[0]?.owner_did ?? null;
+export interface RevokedSession {
+  ownerDid: string;
+  authProvider: AuthProvider;
 }
 
-export async function completeOAuthSignIn(
+export async function revokeSession(pool: Pool, token: string): Promise<RevokedSession | null> {
+  if (!sessionToken.test(token)) return null;
+  const result = await pool.query<{ owner_did: string; auth_provider: AuthProvider }>(
+    `DELETE FROM app_sessions session
+      USING accounts account
+      WHERE session.token_hash=$1 AND account.did=session.owner_did
+      RETURNING session.owner_did, account.auth_provider`,
+    [hash(token)],
+  );
+  const row = result.rows[0];
+  return row ? { ownerDid: row.owner_did, authProvider: row.auth_provider } : null;
+}
+
+async function completeSignIn(
   pool: Pool,
   verifiedDid: string,
-  verifiedHandle?: string,
+  verifiedHandle: string | undefined,
+  authProvider: AuthProvider,
 ): Promise<{ token: string; hogId: string }> {
   if (!isValidDid(verifiedDid)) throw new Error("Invalid DID");
-  if (verifiedHandle !== undefined && !isValidBlueskyHandle(verifiedHandle)) {
-    throw new Error("Invalid Bluesky handle");
-  }
   return transaction(pool, async client => {
-    await client.query(
-      `INSERT INTO accounts(did, handle) VALUES ($1,$2)
-       ON CONFLICT (did) DO UPDATE SET handle=COALESCE(EXCLUDED.handle, accounts.handle)`,
-      [verifiedDid, verifiedHandle ?? null],
+    const account = await client.query<{ auth_provider: AuthProvider }>(
+      `INSERT INTO accounts(did, handle, auth_provider) VALUES ($1,$2,$3)
+       ON CONFLICT (did) DO UPDATE
+         SET handle=COALESCE(EXCLUDED.handle, accounts.handle)
+       WHERE accounts.auth_provider=EXCLUDED.auth_provider
+       RETURNING auth_provider`,
+      [verifiedDid, verifiedHandle ?? null, authProvider],
     );
-    await client.query("SELECT did FROM accounts WHERE did=$1 FOR UPDATE", [verifiedDid]);
+    if (!account.rowCount) throw new Error("Account identity provider does not match");
     const hogId = await ensureHog(client, verifiedDid);
     const token = randomBytes(32).toString("hex");
     await client.query("DELETE FROM app_sessions WHERE owner_did=$1", [verifiedDid]);
@@ -167,6 +187,29 @@ export async function completeOAuthSignIn(
     );
     return { token, hogId };
   });
+}
+
+export async function completeOAuthSignIn(
+  pool: Pool,
+  verifiedDid: string,
+  verifiedHandle?: string,
+): Promise<{ token: string; hogId: string }> {
+  if (verifiedHandle !== undefined && !isValidBlueskyHandle(verifiedHandle)) {
+    throw new Error("Invalid Bluesky handle");
+  }
+  return completeSignIn(pool, verifiedDid, verifiedHandle, "bluesky");
+}
+
+export async function completeGitHubSignIn(
+  pool: Pool,
+  githubUserId: string,
+  githubLogin: string,
+): Promise<{ token: string; hogId: string }> {
+  if (!/^[1-9][0-9]{0,19}$/.test(githubUserId)) throw new Error("Invalid GitHub user ID");
+  if (!isValidGitHubLogin(githubLogin)) {
+    throw new Error("Invalid GitHub login");
+  }
+  return completeSignIn(pool, `did:github:${githubUserId}`, githubLogin, "github");
 }
 
 async function readOnlyAction(

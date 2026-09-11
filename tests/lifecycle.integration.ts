@@ -82,7 +82,12 @@ test("one terminal receipt freezes a tombstone before one next generation", asyn
     assert.equal(endedProfile.tombstones[0].generation, 1);
     assert.equal(endedProfile.tombstones[0].finalState.stats.slop, 100);
     assert.equal(endedProfile.tombstones[0].finalAppearance.artVersion, 1);
-    assert.deepEqual(await getAccountSession(pool, token), { ownerDid: did, hogId: null, handle: null });
+    assert.deepEqual(await getAccountSession(pool, token), {
+      ownerDid: did,
+      hogId: null,
+      handle: null,
+      authProvider: "bluesky",
+    });
 
     const publicEnding = await getPublicPen(pool, pen.penId);
     assert.ok(publicEnding);

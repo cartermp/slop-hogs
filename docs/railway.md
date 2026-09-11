@@ -24,10 +24,15 @@ Set application variables:
 | OAUTH_PRIVATE_KEY | P-256 EC private key generated outside the repository |
 | OAUTH_ENCRYPTION_KEY | Base64-encoded 32-byte key generated outside the repository |
 | OAUTH_KEY_ID | Stable public key identifier, for example `slop-hogs-1` |
+| GITHUB_CLIENT_ID | Client ID for the GitHub OAuth app |
+| GITHUB_CLIENT_SECRET | Client secret for the GitHub OAuth app |
 | SLOP_HOGS_OWNER_DIDS | Comma-separated owner DIDs allowed to open `/owner` |
 | TRUSTED_PROXY_COUNT | `1` for Railway's forwarding proxy |
 
 Use the private DATABASE_URL, not DATABASE_PUBLIC_URL. Do not add TEST_DATABASE_URL or paid AI keys. Keep OAuth keys in Railway variables, never in `NEXT_PUBLIC_` variables or operating notes. Do not attach a volume to the app. Its filesystem is disposable.
+
+Register the GitHub OAuth app with `APP_ORIGIN` as its homepage and
+`APP_ORIGIN/oauth/github/callback` as its authorization callback URL.
 
 ## 3. Connect and deploy deliberately
 

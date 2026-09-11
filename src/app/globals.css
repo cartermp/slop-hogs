@@ -43,6 +43,25 @@ h1 { font-size: clamp(2.8rem, 8vw, 5.6rem); line-height: .98; letter-spacing: -.
 .note { max-width: 38rem; font-size: 1rem; line-height: 1.6; color: #bba9b5; margin: 1.5rem 0 .5rem; }
 .lab-link { display: inline-block; margin-top: .75rem; color: #ff9ec3; font-weight: 700; text-underline-offset: .25rem; }
 .login-form { max-width: 38rem; margin-top: 1.5rem; }
+.login-options { max-width: 38rem; }
+.github-login-form { max-width: 38rem; }
+.github-login-form .auth-button { width: 100%; }
+.github-auth-button { background: #f2edf0; }
+.login-divider {
+  display: flex;
+  align-items: center;
+  gap: .75rem;
+  margin: .75rem 0;
+  color: #bba9b5;
+  font-size: .8rem;
+  text-transform: uppercase;
+}
+.login-divider::before, .login-divider::after {
+  height: 1px;
+  flex: 1;
+  background: #694356;
+  content: "";
+}
 .login-form label { display: block; margin-bottom: .5rem; color: #ffc0d8; font-size: .85rem; font-weight: 750; }
 .login-row { display: flex; align-items: flex-start; gap: .65rem; }
 .handle-combobox { position: relative; min-width: 0; flex: 1; }

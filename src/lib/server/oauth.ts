@@ -1,6 +1,5 @@
 import { createCipheriv, createDecipheriv, createHash, randomBytes, randomUUID } from "node:crypto";
 import {
-  type Fetch,
   JoseKey,
   NodeOAuthClient,
   type NodeSavedSession,
@@ -11,6 +10,7 @@ import {
 } from "@atproto/oauth-client-node";
 import type { Pool } from "pg";
 import { BLUESKY_PUBLIC_API } from "../bluesky-handles.ts";
+import { createBoundedFetch } from "./bounded-fetch.ts";
 import { getDatabase } from "./database.ts";
 import { requestSource, reserveHourlyAttempt } from "./hourly-rate-limit.ts";
 import { loadCostPolicy } from "./cost-policy.ts";
@@ -119,44 +119,6 @@ function createRequestLock(pool: Pool): RuntimeLock {
           lock_hash: lockHash,
         }, error);
       }
-    }
-  };
-}
-
-function createBoundedFetch(timeoutMs: number, maxBytes: number): Fetch {
-  return async (input, init) => {
-    const timeout = new AbortController();
-    const timer = setTimeout(() => timeout.abort(), timeoutMs);
-    const requestSignal = init?.signal ?? (input instanceof Request ? input.signal : undefined);
-    const signal = requestSignal ? AbortSignal.any([requestSignal, timeout.signal]) : timeout.signal;
-    try {
-      const response = await fetch(input, { ...init, signal });
-      const declaredSize = Number(response.headers.get("content-length") ?? "0");
-      if (!Number.isFinite(declaredSize) || declaredSize > maxBytes) {
-        await response.body?.cancel();
-        throw new Error("OAuth response exceeds the configured size limit");
-      }
-      if (!response.body) return response;
-      const reader = response.body.getReader();
-      const chunks: Uint8Array[] = [];
-      let received = 0;
-      while (true) {
-        const { done, value } = await reader.read();
-        if (done) break;
-        received += value.byteLength;
-        if (received > maxBytes) {
-          await reader.cancel();
-          throw new Error("OAuth response exceeds the configured size limit");
-        }
-        chunks.push(value);
-      }
-      return new Response(Buffer.concat(chunks), {
-        status: response.status,
-        statusText: response.statusText,
-        headers: response.headers,
-      });
-    } finally {
-      clearTimeout(timer);
     }
   };
 }
