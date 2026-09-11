@@ -1,6 +1,5 @@
 /** Feature enforcement ships with each feature before its flag can be enabled. */
 const limitCeilings = {
-  accounts: 50,
   loginAttemptsPerIpPerHour: 5,
   loginAttemptsGlobalPerHour: 200,
   actorSearchesPerIpPerHour: 60,
@@ -24,24 +23,23 @@ const databaseCeilings = {
   readOnlyPercent: 95,
 } as const;
 const featureNames = [
-  "registrations", "readOnlyMode", "externalPreviews", "cardRendering", "activityImports", "paidAi",
+  "readOnlyMode", "externalPreviews", "cardRendering", "activityImports", "paidAi",
 ] as const;
 const implementedFeatures = new Set<(typeof featureNames)[number]>([
-  "registrations", "readOnlyMode", "externalPreviews", "cardRendering",
+  "readOnlyMode", "externalPreviews", "cardRendering",
 ]);
 
 type Limits = { [K in keyof typeof limitCeilings]: number };
 type DatabasePolicy = { [K in keyof typeof databaseCeilings]: number };
 type Features = {
-  registrations: boolean;
   readOnlyMode: boolean;
   externalPreviews: boolean;
   cardRendering: boolean;
 } & {
-  [K in Exclude<typeof featureNames[number], "registrations" | "readOnlyMode" | "externalPreviews" | "cardRendering">]: false
+  [K in Exclude<typeof featureNames[number], "readOnlyMode" | "externalPreviews" | "cardRendering">]: false
 };
 export interface CostPolicy {
-  version: 3;
+  version: 4;
   railway: { usageAlertCents: number; computeHardLimitCents: number };
   limits: Limits;
   database: DatabasePolicy;
@@ -70,7 +68,7 @@ function positiveInteger(value: unknown, ceiling: number, path: string): number 
 export function parseCostPolicy(input: unknown): CostPolicy {
   const root = objectWithKeys(input,
     ["version", "railway", "limits", "database", "features", "paidAiMonthlyBudgetCents"], "cost policy");
-  if (root.version !== 3) throw new Error("Unsupported cost policy version");
+  if (root.version !== 4) throw new Error("Unsupported cost policy version");
   const provider = objectWithKeys(root.railway, ["usageAlertCents", "computeHardLimitCents"], "railway");
   const railway = {
     usageAlertCents: positiveInteger(provider.usageAlertCents, 1_500, "railway.usageAlertCents"),
@@ -103,9 +101,8 @@ export function parseCostPolicy(input: unknown): CostPolicy {
   }
   if (root.paidAiMonthlyBudgetCents !== 0) throw new Error("Paid AI budget must be zero");
   return {
-    version: 3, railway, limits, database,
+    version: 4, railway, limits, database,
     features: {
-      registrations: rawFeatures.registrations as boolean,
       readOnlyMode: rawFeatures.readOnlyMode as boolean,
       externalPreviews: rawFeatures.externalPreviews as boolean,
       cardRendering: rawFeatures.cardRendering as boolean,

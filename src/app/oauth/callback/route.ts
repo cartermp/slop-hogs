@@ -1,8 +1,7 @@
 import { NextResponse } from "next/server";
 import { getDatabase } from "@/lib/server/database";
-import { loadCostPolicy } from "@/lib/server/cost-policy";
-import { AccountLimitError, completeOAuthSignIn, NotInvitedError, RegistrationClosedError } from "@/lib/server/hogs";
-import { loadOAuthConfig, parseAdmissionDids } from "@/lib/server/oauth-config";
+import { completeOAuthSignIn } from "@/lib/server/hogs";
+import { loadOAuthConfig } from "@/lib/server/oauth-config";
 import { getOAuthClient } from "@/lib/server/oauth";
 import { httpRequestFields, startServerActivity } from "@/lib/server/logging";
 
@@ -36,19 +35,7 @@ export async function GET(request: Request) {
     const client = await getOAuthClient();
     ({ session: oauthSession } = await client.callback(requestUrl.searchParams));
     event.add({ actor_did: oauthSession.did });
-    const policy = loadCostPolicy();
-    const appSession = await completeOAuthSignIn(getDatabase(), oauthSession.did, {
-      registrationsEnabled: policy.features.registrations,
-      accountLimit: policy.limits.accounts,
-      invitedDids: parseAdmissionDids(
-        process.env.BLUESKY_INVITED_DIDS,
-        process.env.SLOP_HOGS_OWNER_DIDS,
-      ),
-      operationalPolicy: {
-        database: policy.database,
-        readOnlyMode: policy.features.readOnlyMode,
-      },
-    });
+    const appSession = await completeOAuthSignIn(getDatabase(), oauthSession.did);
     const response = NextResponse.redirect(new URL("/?signed_in=1", config.origin), 303);
     response.cookies.set(cookieName, appSession.token, {
       httpOnly: true,
@@ -72,18 +59,6 @@ export async function GET(request: Request) {
     const cleanupFields = cleanupError instanceof Error
       ? { provider_cleanup_outcome: "failure", provider_cleanup_error: cleanupError.message }
       : { provider_cleanup_outcome: oauthSession ? "success" : "not_needed" };
-    if (error instanceof NotInvitedError) {
-      event.emit("rejected", { http_status: 303, rejection_reason: "not_invited", ...cleanupFields }, error);
-      return errorRedirect(config.origin, "not_invited");
-    }
-    if (error instanceof RegistrationClosedError) {
-      event.emit("rejected", { http_status: 303, rejection_reason: "registration_closed", ...cleanupFields }, error);
-      return errorRedirect(config.origin, "registration_closed");
-    }
-    if (error instanceof AccountLimitError) {
-      event.emit("rejected", { http_status: 303, rejection_reason: "account_limit", ...cleanupFields }, error);
-      return errorRedirect(config.origin, "account_limit");
-    }
     event.emit("failure", { http_status: 303, ...cleanupFields }, error);
     return errorRedirect(config.origin, "invalid_callback");
   }

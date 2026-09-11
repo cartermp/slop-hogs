@@ -14,21 +14,21 @@ This revision replaces the earlier full-time schedule, Render deployment, separa
 
    Keep architecture decisions, task status, and operating instructions in the repository so a later session can resume without reconstructing a chat. Do not rely on an agent running continuously between assignments. There is no standing authorization to add services, enable paid APIs, raise spending limits, or deploy on every push.
 
-2. Start with a playable private alpha.
+2. Start with a playable core release.
 
    Target five recognizable diet builds, eight authored mutations, and one complete ending. The original roughly 24 mutations and three endings remain expansion milestones after the loop works.
 
    | Milestone | Included behavior |
    | --- | --- |
    | Local toy | One hog, built-in food, stats, five visually distinct diet outcomes |
-   | Persistent alpha | Bluesky sign-in, saved state, manual post feeding, cleaning, collection |
-   | Social alpha | Public pen, bounded visitor treats, speech templates, share cards |
-   | Replayable alpha | First ending, tombstone, next generation |
+   | Persistent game | Bluesky sign-in, saved state, manual post feeding, cleaning, collection |
+   | Social game | Public pen, bounded visitor treats, speech templates, share cards |
+   | Replayable game | First ending, tombstone, next generation |
    | Expanded beta | About 24 mutations, combinations, three endings, better art |
 
    Use a daily tray of fictional meals alongside Bluesky URLs. A player should see a mutation in the first session. The game remains playable when an external API is unavailable. The owner's judgments about funny, disgusting, and desirable are the acceptance criteria for art and writing.
 
-   Defer automatic activity ingestion, arbitrary URL scraping, uploads, video processing, breeding, paid text or image generation, and direct Bluesky publishing. Ship a death later in the task order, but before calling the alpha replayable.
+   Defer automatic activity ingestion, arbitrary URL scraping, uploads, video processing, breeding, paid text or image generation, and direct Bluesky publishing. Ship a death later in the task order, but before calling the game replayable.
 
 3. Keep the runtime and dependency list short.
 
@@ -97,7 +97,7 @@ This revision replaces the earlier full-time schedule, Render deployment, separa
 
    Render a share card only after an authenticated owner requests an eligible event. Complete the game transaction first. Reserve the rendering quota durably, then render with a short deadline and one concurrent render per app instance. Store the result in PostgreSQL with a unique event key. If rendering fails or the app restarts, the event survives and the owner can retry within the remaining quota. Return an existing successful card on a retry.
 
-   For the small alpha, store compressed PNGs in a size-limited database table instead of adding object storage. Use caching headers and an immutable image URL. When the card cache reaches its configured budget, stop new rendering and show a generic game card. Keep historical event and appearance data. Moving images into a Railway bucket becomes an explicit later task if measurements justify it.
+   For the initial release, store compressed PNGs in a size-limited database table instead of adding object storage. Use caching headers and an immutable image URL. When the card cache reaches its configured budget, stop new rendering and show a generic game card. Keep historical event and appearance data. Moving images into a Railway bucket becomes an explicit later task if measurements justify it.
 
    Start visitor treats as small Joy or cosmetic changes. Limit them per sender, recipient, and day. An owner must accept a treat as a normal meal before it can change the build. Provide gift-disable and block controls. Visitors cannot cause terminal outcomes.
 
@@ -119,7 +119,7 @@ This revision replaces the earlier full-time schedule, Render deployment, separa
 
    Serverless sleeping is optional for the app, not a promised saving. Test OAuth callbacks and cold starts first. Avoid timers, polling loops, and frequent health pings that prevent sleeping. Do not assume the database sleeps, and do not weaken correctness to chase that saving.
 
-9. Install cost controls before inviting players.
+9. Install cost controls before live playtesting.
 
    Proposed starting policy: target $10 to $20 per month of Railway usage, an email alert at $15, and a $30 Compute Usage hard limit. These are planning defaults for the owner to set at deployment, not a bill estimate or controls already applied. Railway Hobby has a $5 minimum with included usage credit; actual resource consumption determines the bill above that minimum. [Railway pricing](https://railway.com/pricing)
 
@@ -129,7 +129,7 @@ This revision replaces the earlier full-time schedule, Render deployment, separa
 
    | Control | Initial application policy |
    | --- | --- |
-   | Signup | Invite-only, 50-account alpha cap |
+   | Signup | Open to any account verified by Bluesky OAuth |
    | Paid AI | Disabled, zero game-model budget, no provider keys |
    | Railway Agent | Do not use; set zero allowance if supported, otherwise minimum available and document it |
    | Services | One app replica and one database; no automatic replica growth |
@@ -145,9 +145,9 @@ This revision replaces the earlier full-time schedule, Render deployment, separa
 
    The quotas above are product choices, not provider features. Enforce them on the server, with atomic database counters and an explicit in-flight rendering limit. Reserve quota before expensive work. Failed or abandoned work must not receive unlimited free retries. Handle proxy headers using the platform's trusted configuration so clients cannot invent a new source IP.
 
-   Add flags for registrations, external previews, card rendering, imports, and paid AI, plus a read-only mode. Imports and paid AI start disabled. A protected owner page shows feature flags, account count, quota use, estimated database and card size, and last backup check. It does not contain a Railway admin token or claim to know the current invoice from local counters. Link to the provider usage page for that.
+   Add flags for external previews, card rendering, imports, and paid AI, plus a read-only mode. Imports and paid AI start disabled. A protected owner page shows feature flags, account count, quota use, estimated database and card size, and last backup check. It does not contain a Railway admin token or claim to know the current invoice from local counters. Link to the provider usage page for that.
 
-   Start with an internal database growth budget of 1 GB within the provisioned volume. At 70%, surface an owner warning; at 85%, disable new registrations and cards; at 95%, reject state-changing game actions and enter read-only mode until space is recovered. Check these thresholds through bounded maintenance with recorded last-run times. Do not delete hog histories automatically. Provider volume capacity and backups need separate headroom and monitoring.
+   Start with an internal database growth budget of 1 GB within the provisioned volume. At 70%, surface an owner warning; at 85%, disable new cards; at 95%, reject state-changing game actions and enter read-only mode until space is recovered. Check these thresholds through bounded maintenance with recorded last-run times. Do not delete hog histories automatically. Provider volume capacity and backups need separate headroom and monitoring.
 
    Validate limits at startup. Production must not treat a missing or malformed cap as unlimited. Persist quotas across restarts. Test the application with tiny quotas so we can prove requests stop before expensive calls. Provider shutdown remains the last line of defense for traffic and resource usage that application controls cannot prevent.
 
@@ -155,11 +155,11 @@ This revision replaces the earlier full-time schedule, Render deployment, separa
 
 10. Back up the game and document how to stop it.
 
-   Enable Railway daily volume backups and test a database restore before the private alpha contains valued progress. The documented daily schedule retains six days; backup storage is billable. Restores are restricted to the same project and environment, and wiping a volume deletes its backups. Record these limitations in the operating notes. [Railway backups](https://docs.railway.com/volumes/backups)
+   Enable Railway daily volume backups and test a database restore before the live game contains valued progress. The documented daily schedule retains six days; backup storage is billable. Restores are restricted to the same project and environment, and wiping a volume deletes its backups. Record these limitations in the operating notes. [Railway backups](https://docs.railway.com/volumes/backups)
 
-   Target no more than 24 hours of lost game progress for the alpha. Restore work happens when the owner is available; do not imply an around-the-clock support commitment. Include a small encrypted export before risky migrations if a practical secure destination is available, with retention and restore instructions.
+   Target no more than 24 hours of lost game progress. Restore work happens when the owner is available; do not imply an around-the-clock support commitment. Include a small encrypted export before risky migrations if a practical secure destination is available, with retention and restore instructions.
 
-   Keep a short runbook for normal deployment, migration failure, disabling expensive features, closing signup, restoring a backup, and responding to a usage cutoff. After cutoff, inspect what spent the money before resuming. Never automatically raise a cap or repeatedly restart workloads to bypass it.
+   Keep a short runbook for normal deployment, migration failure, disabling expensive features, restoring a backup, and responding to a usage cutoff. After cutoff, inspect what spent the money before resuming. Never automatically raise a cap or repeatedly restart workloads to bypass it.
 
    Use Railway's logs and metrics initially. Avoid logging OAuth secrets, complete imported posts, or every polling request. Check actual usage after the first day and first week, then at the next owner session after a material deployment. Waiting for the next session must not be the only cost defense.
 
@@ -180,9 +180,9 @@ This revision replaces the earlier full-time schedule, Render deployment, separa
    | SH-009 | Add public pens, bounded gifts, blocks, and owner controls | SH-008 | Visitors cannot exceed allowances or alter protected state |
    | SH-010 | Add speech templates and capped share-card rendering | SH-009 | Repeated anonymous reads cause no rendering or external fetching |
    | SH-011 | Add one ending, tombstone, and next generation | SH-008 | Exactly one terminal event is recorded and the next life preserves history |
-   | SH-012 | Run a small invited playtest and fix observed problems | SH-006 through SH-011 | Cost remains within policy and players deliberately pursue builds |
+   | SH-012 | Run an owner playtest and fix observed problems | SH-006 through SH-011 | Cost remains within policy and the owner deliberately pursues builds |
 
-   Card rendering need not block the first invited testers. Bring forward the deployment safety task before any public exposure. Add subsequent mutations and endings as small content PRs. Avoid mixing art overhaul, authentication changes, and infrastructure changes in one task.
+   Card rendering need not block the first owner playtest. Bring forward the deployment safety task before any public exposure. Add subsequent mutations and endings as small content PRs. Avoid mixing art overhaul, authentication changes, and infrastructure changes in one task.
 
    Record task status in a small backlog file or GitHub issues once available. Use a PR checklist with acceptance evidence, migration and deployment impact, changed dependencies, and changed cost behavior. A task is complete when its acceptance condition is met, not when every possible enhancement has been explored.
 

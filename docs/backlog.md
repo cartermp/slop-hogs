@@ -15,18 +15,17 @@ The owner assigns a bounded task; Codex implements it and returns a reviewable P
 | SH-009 | Public pens, gifts, blocks and owner controls | SH-008 | Complete |
 | SH-010 | Speech templates and capped cards | SH-009 | Complete |
 | SH-011 | One ending, tombstone, next generation | SH-008 | Complete |
-| SH-012 | Invited playtest and observed fixes | SH-006 through SH-011 | In progress; repository preflight complete, live session pending |
+| SH-012 | Owner playtest and observed fixes | SH-006 through SH-011 | In progress; repository preflight complete, live session pending |
 
 ## Current handoff
 
 SH-012 repository preflight now exposes the stats and six-meal diet history needed
 to pursue a build without revealing mutation recipes. The
-[invited playtest protocol](playtest.md) defines a three-to-five-player cohort,
-evidence, cost checks, and stop conditions. Live Railway spending controls,
-resource ceilings, HTTPS OAuth, restart persistence, daily backup scheduling,
-and one restore still require owner verification before players are invited.
-SH-012 remains in progress until the live session and observed fixes are
-complete.
+[owner playtest protocol](playtest.md) defines the session, evidence, cost
+checks, and stop conditions. Live Railway spending controls, resource ceilings,
+HTTPS OAuth, restart persistence, daily backup scheduling, and one restore
+still require owner verification. SH-012 remains in progress until the live
+session and observed fixes are complete.
 
 Run `npm ci`, `npm run check`, `npm run build`, and `npm run smoke` to reproduce automated validation. Run `npm run dev`, then open `/gallery` to compare the five appearances at desktop and phone widths.
 

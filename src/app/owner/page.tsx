@@ -48,7 +48,7 @@ export default async function OwnerPage() {
       {operations.storage.warning && (
         <p className="operations-warning">
           Database storage is at {operations.storage.usedPercent}% of the internal budget.
-          {operations.storage.readOnly ? " State changes are blocked." : " New registrations and cards may be blocked."}
+          {operations.storage.readOnly ? " State changes are blocked." : " New cards may be blocked."}
         </p>
       )}
 
@@ -66,7 +66,7 @@ export default async function OwnerPage() {
         <article>
           <h2>Current quota use</h2>
           <dl>
-            <div><dt>Accounts</dt><dd>{operations.accountCount} / {policy.limits.accounts}</dd></div>
+            <div><dt>Accounts</dt><dd>{operations.accountCount}</dd></div>
             <div><dt>Logins this hour</dt><dd>{operations.loginAttemptsThisHour} / {policy.limits.loginAttemptsGlobalPerHour}</dd></div>
             <div><dt>Post lookups this hour</dt><dd>{operations.postLookupsThisHour} / {policy.limits.postLookupsGlobalPerHour}</dd></div>
             <div><dt>Visitor treats today</dt><dd>{operations.giftsToday}</dd></div>
@@ -82,7 +82,6 @@ export default async function OwnerPage() {
             {Object.entries(policy.features).map(([name, enabled]) => (
               <div key={name}><dt>{name}</dt><dd>{enabled ? "On" : "Off"}</dd></div>
             ))}
-            <div><dt>Registrations blocked</dt><dd>{operations.storage.registrationsBlocked ? "Yes" : "No"}</dd></div>
             <div><dt>Cards blocked</dt><dd>{operations.storage.cardsBlocked ? "Yes" : "No"}</dd></div>
           </dl>
         </article>

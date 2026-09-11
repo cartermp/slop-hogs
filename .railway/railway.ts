@@ -30,7 +30,6 @@ export default defineRailway(() => {
     env: {
       DATABASE_URL: preserve(),
       APP_ORIGIN: preserve(),
-      BLUESKY_INVITED_DIDS: preserve(),
       NEXT_TELEMETRY_DISABLED: preserve(),
       NODE_ENV: preserve(),
       OAUTH_ENCRYPTION_KEY: preserve(),

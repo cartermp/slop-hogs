@@ -3,9 +3,9 @@
 A Bluesky-linked virtual pet with a terrible diet. Built by one developer and Codex in small asynchronous tasks.
 
 SH-012 playtest preflight makes each hog's lifetime favorite, recent six-meal
-diet, and ending-relevant stats visible so invited players can pursue a build
-deliberately. The [invited playtest protocol](docs/playtest.md) is ready, but
-the live Railway gate and invited session still require owner execution.
+diet, and ending-relevant stats visible so the owner can pursue a build
+deliberately. The [owner playtest protocol](docs/playtest.md) is ready, but
+the live Railway gate and playtest session still require owner execution.
 
 ## Run locally
 
@@ -23,7 +23,7 @@ Open http://localhost:3000. The shell and local gallery do not require a provide
 
 In development, open http://localhost:3000/gallery to compare the mutation-composed six-meal AI image, generated post, chatbot screenshot, human post, and shitpost builds. The gallery returns a normal not-found page in production.
 
-The shell and gallery still run without auth configuration. To exercise OAuth, configure PostgreSQL as described in [database development](docs/database.md), run migrations, and set `APP_ORIGIN`, `OAUTH_PRIVATE_KEY`, `OAUTH_ENCRYPTION_KEY`, `BLUESKY_INVITED_DIDS`, and `SLOP_HOGS_OWNER_DIDS`. Generate the two secrets with:
+The shell and gallery still run without auth configuration. To exercise OAuth, configure PostgreSQL as described in [database development](docs/database.md), run migrations, and set `APP_ORIGIN`, `OAUTH_PRIVATE_KEY`, `OAUTH_ENCRYPTION_KEY`, and `SLOP_HOGS_OWNER_DIDS`. Generate the two secrets with:
 
 ```sh
 openssl genpkey -algorithm EC -pkeyopt ec_paramgen_curve:P-256
@@ -57,7 +57,7 @@ or secrets are redacted before serialization.
 
 ## Cost boundary
 
-`config/cost-policy.json` holds the approved initial limits. Startup refuses missing, malformed, or unsafe settings. Invite-only registration and external previews are enabled. New public lookups are limited to 12 per account per UTC day and 100 globally per hour; cached previews do not spend lookup quota. Visitor treats are limited to three sent per account per UTC day, ten received per pen per day, one sender-to-pen gift per day, and 20 pending gifts per active hog. Authenticated owners can render at most two new cards per UTC day and the app can render 50 globally; failed render attempts count, one render runs per app instance, PNGs stop at 250 KB each, and stored cards stop at 250 MB total. The app records database size at startup and at most every 15 minutes during writes. It warns at 70% of the 1 GB internal budget, blocks registrations and cards at 85%, and rejects new game state changes at 95%. `features.readOnlyMode` is the manual emergency stop.
+`config/cost-policy.json` holds the approved initial limits. Startup refuses missing, malformed, or unsafe settings. Any Bluesky account verified by OAuth can create a Slop Hogs account. New public lookups are limited to 12 per account per UTC day and 100 globally per hour; cached previews do not spend lookup quota. Visitor treats are limited to three sent per account per UTC day, ten received per pen per day, one sender-to-pen gift per day, and 20 pending gifts per active hog. Authenticated owners can render at most two new cards per UTC day and the app can render 50 globally; failed render attempts count, one render runs per app instance, PNGs stop at 250 KB each, and stored cards stop at 250 MB total. The app records database size at startup and at most every 15 minutes during writes. It warns at 70% of the 1 GB internal budget, blocks new cards at 85%, and rejects new game state changes at 95%. `features.readOnlyMode` is the manual emergency stop.
 
 The Railway dollar values are **configuration targets, not a billing cap applied by this code**. Configure the workspace dashboard before deployment. Login handle suggestions return at most five accounts and are limited to 60 searches per client address and 1,000 globally each hour. Request quotas must be implemented atomically with each future feature before enabling it. See [cost controls](docs/cost-controls.md).
 
@@ -69,10 +69,10 @@ The owner-only `/owner` page shows application feature flags, implemented quota 
 - [Implementation plan](docs/implementation-plan.md)
 - [Architecture decisions](docs/decisions.md)
 - [Cost controls and deployment gate](docs/cost-controls.md)
-- [Invited playtest protocol](docs/playtest.md)
+- [Owner playtest protocol](docs/playtest.md)
 
 Railway is the intended host. Repository support through SH-011 and SH-012
 preflight is complete, but no hosted resource or dashboard setting can be
 verified from source control and CI does not deploy. Complete the live checklist
-in the runbook before inviting players; SH-012 remains open until the invited
-session and its observed fixes are complete.
+in the runbook before playtesting; SH-012 remains open until the owner session
+and its observed fixes are complete.

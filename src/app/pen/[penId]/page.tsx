@@ -34,7 +34,7 @@ export default async function PublicPenPage({
     <main>
       <p className="eyebrow">Public pen</p>
       <h1>{active
-        ? <>Look, don&apos;t feed.<br />Unless invited.</>
+        ? <>Look, don&apos;t feed.<br />Unless you brought snacks.</>
         : <>The pen is quiet.<br />The plot is not.</>}</h1>
       {active ? (
         <div className="pen">

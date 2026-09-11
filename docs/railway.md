@@ -1,6 +1,6 @@
 # First Railway deployment
 
-Status: repository support for SH-006 is complete. Source control cannot confirm Railway billing limits, resource settings, domains, backup schedules, or a live restore. The owner must complete and record the live checks below before inviting players.
+Status: repository support for SH-006 is complete. Source control cannot confirm Railway billing limits, resource settings, domains, backup schedules, or a live restore. The owner must complete and record the live checks below before playtesting.
 
 ## 1. Set the spending controls first
 
@@ -24,8 +24,7 @@ Set application variables:
 | OAUTH_PRIVATE_KEY | P-256 EC private key generated outside the repository |
 | OAUTH_ENCRYPTION_KEY | Base64-encoded 32-byte key generated outside the repository |
 | OAUTH_KEY_ID | Stable public key identifier, for example `slop-hogs-1` |
-| BLUESKY_INVITED_DIDS | Comma-separated invited account DIDs; empty means only configured owners can create accounts |
-| SLOP_HOGS_OWNER_DIDS | Comma-separated owner DIDs allowed to create an account and open `/owner` |
+| SLOP_HOGS_OWNER_DIDS | Comma-separated owner DIDs allowed to open `/owner` |
 | TRUSTED_PROXY_COUNT | `1` for Railway's forwarding proxy |
 
 Use the private DATABASE_URL, not DATABASE_PUBLIC_URL. Do not add TEST_DATABASE_URL or paid AI keys. Keep OAuth keys in Railway variables, never in `NEXT_PUBLIC_` variables or operating notes. Do not attach a volume to the app. Its filesystem is disposable.
@@ -71,7 +70,7 @@ Record the project/service identifiers, deployed commit, URL, actual resource se
 
 ## 5. Enable and verify daily backups
 
-In the PostgreSQL volume settings, enable a daily backup schedule with six days of retention. Backup storage is billable. Railway restores are restricted to the same project and environment, and deleting a volume also deletes its backups. The alpha recovery target is at most 24 hours of lost progress; restore work occurs when the owner is available.
+In the PostgreSQL volume settings, enable a daily backup schedule with six days of retention. Backup storage is billable. Railway restores are restricted to the same project and environment, and deleting a volume also deletes its backups. The recovery target is at most 24 hours of lost progress; restore work occurs when the owner is available.
 
 Before creating the backup to test, use the app service SSH session:
 
@@ -89,15 +88,15 @@ npm run backup:verify
 
 The verifier requires both databases to contain the prepared challenge and identical synthetic hog state. It writes a random probe to the restore target and refuses verification if the source can see that probe, preventing the production database from being accepted as its own restore. A successful result records the verification time and both measured database sizes in production for `/owner`, then consumes the challenge so the same restore cannot refresh that timestamp. Run `backup:prepare` again before every later restore test.
 
-Remove `RESTORE_DATABASE_URL`, delete the temporary restored service and its volume, and confirm they no longer appear in project resources. Do not delete the production volume or retained synthetic fixture. Record the backup schedule, backup timestamp, restore verification timestamp, and cleanup in operating notes. Repeat the restore test before risky migrations and periodically while the alpha contains valued progress.
+Remove `RESTORE_DATABASE_URL`, delete the temporary restored service and its volume, and confirm they no longer appear in project resources. Do not delete the production volume or retained synthetic fixture. Record the backup schedule, backup timestamp, restore verification timestamp, and cleanup in operating notes. Repeat the restore test before risky migrations and periodically while the live game contains valued progress.
 
 ## 6. Verify live OAuth and launch controls
 
-On the generated HTTPS origin, test an invited owner login, an invited non-owner login, a non-invited denial, logout, and a malformed or replayed callback rejection. Confirm the app requests identity only and cannot post.
+On the generated HTTPS origin, test a new owner login, repeat login, logout, and a malformed or replayed callback rejection. Confirm the app requests identity only and cannot post.
 
-The app measures PostgreSQL size during startup, at most every 15 minutes on registration or game writes, and whenever an owner opens `/owner`. The 1 GB internal budget warns at 70%, blocks registrations and future card creation at 85%, and rejects new game state changes at 95%. Existing idempotent action receipts remain readable. Provider volume capacity and backup storage need separate Railway headroom.
+The app measures PostgreSQL size during startup, at most every 15 minutes on game writes, and whenever an owner opens `/owner`. The 1 GB internal budget warns at 70%, blocks future card creation at 85%, and rejects new game state changes at 95%. Existing idempotent action receipts remain readable. Provider volume capacity and backup storage need separate Railway headroom.
 
-To close signup, set `features.registrations` to `false` in `config/cost-policy.json`, run the checks, and manually deploy that reviewed commit. To block registration, future card creation, and new game state changes together, set `features.readOnlyMode` to `true` and do the same. Do not edit the thresholds upward: validation allows only the approved ceilings. Record why and when a control changed.
+To block future card creation and new game state changes together, set `features.readOnlyMode` to `true` in `config/cost-policy.json`, run the checks, and manually deploy that reviewed commit. Do not edit the thresholds upward: validation allows only the approved ceilings. Record why and when a control changed.
 
 ## Operating record
 
@@ -113,4 +112,4 @@ If the spending cutoff fires, inspect usage and stop the cause before resuming. 
 
 For a database incident, set read-only mode before recovery if the current database is still writable. Restore only after identifying the correct backup and preserving the current volume when practical. Run `backup:verify` against the candidate restore before switching any connection. Never modify an applied migration or reverse SQL blindly.
 
-Before inviting players, every live item above must be recorded, including a demonstrated restore. A later domain change requires updating `APP_ORIGIN`, OAuth metadata, and callbacks together.
+Before live playtesting, every item above must be recorded, including a demonstrated restore. A later domain change requires updating `APP_ORIGIN`, OAuth metadata, and callbacks together.

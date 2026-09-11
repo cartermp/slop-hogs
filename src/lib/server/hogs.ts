@@ -20,9 +20,6 @@ const hash = (token: string) => createHash("sha256").update(token).digest("hex")
 const uuid = /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i;
 const sessionToken = /^[0-9a-f]{64}$/;
 
-export class RegistrationClosedError extends Error {}
-export class NotInvitedError extends Error {}
-export class AccountLimitError extends Error {}
 export class DuplicatePostError extends Error {}
 export class PostPreviewExpiredError extends Error {}
 
@@ -131,33 +128,11 @@ export async function revokeSession(pool: Pool, token: string): Promise<string |
 export async function completeOAuthSignIn(
   pool: Pool,
   verifiedDid: string,
-  options: {
-    registrationsEnabled: boolean;
-    accountLimit: number;
-    invitedDids: ReadonlySet<string>;
-    operationalPolicy: OperationalPolicy;
-  },
 ): Promise<{ token: string; hogId: string }> {
   if (!isValidDid(verifiedDid)) throw new Error("Invalid DID");
-  const controls = await refreshOperationalStatusForPool(pool, options.operationalPolicy);
-  const result = await transaction(pool, async client => {
-    // One global admission lock makes the account cap exact under concurrent callbacks.
-    await client.query("SELECT pg_advisory_xact_lock(734005)");
-    const existing = await client.query("SELECT did FROM accounts WHERE did=$1 FOR UPDATE", [verifiedDid]);
-    if (!existing.rowCount) {
-      if (!options.invitedDids.has(verifiedDid)) {
-        return { error: "not_invited" } as const;
-      }
-      if (!options.registrationsEnabled || controls.registrationsBlocked) {
-        return { error: "registration_closed" } as const;
-      }
-      const count = await client.query<{ count: string }>("SELECT count(*)::text AS count FROM accounts");
-      if (Number(count.rows[0].count) >= options.accountLimit) {
-        return { error: "account_limit" } as const;
-      }
-      await client.query("INSERT INTO accounts(did) VALUES ($1)", [verifiedDid]);
-    }
-
+  return transaction(pool, async client => {
+    await client.query("INSERT INTO accounts(did) VALUES ($1) ON CONFLICT DO NOTHING", [verifiedDid]);
+    await client.query("SELECT did FROM accounts WHERE did=$1 FOR UPDATE", [verifiedDid]);
     const hogId = await ensureHog(client, verifiedDid);
     const token = randomBytes(32).toString("hex");
     await client.query("DELETE FROM app_sessions WHERE owner_did=$1", [verifiedDid]);
@@ -167,12 +142,6 @@ export async function completeOAuthSignIn(
     );
     return { token, hogId };
   });
-  if ("error" in result) {
-    if (result.error === "account_limit") throw new AccountLimitError("The account limit has been reached");
-    if (result.error === "not_invited") throw new NotInvitedError("This account is not invited");
-    throw new RegistrationClosedError("New registrations are temporarily closed");
-  }
-  return result;
 }
 
 async function readOnlyAction(
