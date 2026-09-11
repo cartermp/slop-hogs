@@ -10,6 +10,7 @@ import {
   hogDiameter,
   movePlayer,
   parseFarmAction,
+  psychosisLevel,
   touchingSlop,
   type FarmPlayer,
 } from "../src/lib/farm-game.ts";
@@ -92,28 +93,28 @@ test("movement becomes increasingly erratic above 50 percent psychosis", () => {
   assert.notEqual(second.y - frantic.y, first.y - frantic.y);
 });
 
-test("psychosis decays over elapsed time without dropping below the starting level", () => {
+test("psychosis decays only from movement and can reach zero", () => {
   const elevated = {
     mass: 40,
     status: "alive" as const,
-    psychosisUpdatedAtMs: NOW,
+    psychosisMovementMs: 0,
   };
-  assert.deepEqual(decayPsychosis(elevated, NOW + 1_999), elevated);
-  assert.deepEqual(decayPsychosis(elevated, NOW + 4_500), {
+  assert.deepEqual(decayPsychosis(elevated, 0), elevated);
+  const partial = decayPsychosis(elevated, 1_999);
+  assert.deepEqual(partial, {
     ...elevated,
-    mass: 38,
-    psychosisUpdatedAtMs: NOW + 4_000,
+    psychosisMovementMs: 1_999,
   });
-  assert.deepEqual(decayPsychosis(
-    { ...elevated, mass: 25 },
-    NOW + 10_000,
-  ), {
+  assert.deepEqual(decayPsychosis(partial, 1), {
     ...elevated,
-    mass: 24,
-    psychosisUpdatedAtMs: NOW + 10_000,
+    mass: 39,
   });
+  const calm = decayPsychosis({ ...elevated, mass: 25 }, 2_000);
+  assert.equal(calm.mass, 24);
+  assert.equal(calm.psychosisMovementMs, 0);
+  assert.equal(psychosisLevel(calm.mass), 0);
   const popped = { ...elevated, mass: 100, status: "popped" as const };
-  assert.deepEqual(decayPsychosis(popped, NOW + 10_000), popped);
+  assert.deepEqual(decayPsychosis(popped, 10_000), popped);
 });
 test("slop collision chooses the nearest pickup within the hog radius", () => {
   const near = { id: "near", kind: "premium_tokens" as const, x: 500, y: 288, expiresAtMs: NOW + 1_000 };
