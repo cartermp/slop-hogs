@@ -43,8 +43,11 @@ try {
   const html = await response.text();
   assert.match(html, /Slop Hogs/);
   assert.match(html, /SLOP SYSTEMS PRESENTS/);
-  assert.match(html, /ROAM THE COMMUNAL FARM/);
   assert.match(html, /Sign in with Bluesky/);
+  assert.match(html, /SIGN IN TO INSERT HOG/);
+  assert.doesNotMatch(html, /SLOP SYSTEMS PRESENTS \/\/ \d{4}/);
+  assert.doesNotMatch(html, /ROAM THE COMMUNAL FARM|EAT UNVERIFIED AI SLOP|GET BIG\. POP SPECTACULARLY/);
+  assert.doesNotMatch(html, /IDENTITY BY BLUESKY|PRESS SIGN IN TO INSERT HOG/);
   assert.equal(response.headers.get("x-powered-by"), null);
   const farm = await fetch(`http://127.0.0.1:${port}/api/farm`, { signal: AbortSignal.timeout(5_000) });
   assert.equal(farm.status, 401);

@@ -31,7 +31,7 @@ export default async function Home({
     <main className="login-screen">
       <div className="login-scanlines" aria-hidden="true" />
       <section className="login-terminal">
-        <p className="pixel-kicker">SLOP SYSTEMS PRESENTS // 2026</p>
+        <p className="pixel-kicker">SLOP SYSTEMS PRESENTS</p>
         <h1>SLOP<br /><span>HOGS</span></h1>
         <div className="login-pig" aria-hidden="true">
           <i className="hog-ear-pixel" />
@@ -41,17 +41,11 @@ export default async function Home({
           <i className="hog-leg-pixel leg-one" />
           <i className="hog-leg-pixel leg-two" />
         </div>
-        <div className="login-copy">
-          <p>ROAM THE COMMUNAL FARM.</p>
-          <p>EAT UNVERIFIED AI SLOP.</p>
-          <p>GET BIG. POP SPECTACULARLY.</p>
-        </div>
         {notice && <p className={errorCode ? "terminal-notice terminal-error" : "terminal-notice"}>{notice}</p>}
         <div className="terminal-auth">
           <LoginForm />
-          <p>IDENTITY BY BLUESKY // NO POSTING PERMISSION REQUESTED</p>
         </div>
-        <div className="blink-prompt">PRESS SIGN IN TO INSERT HOG<span>_</span></div>
+        <div className="blink-prompt">SIGN IN TO INSERT HOG</div>
       </section>
     </main>
   );
