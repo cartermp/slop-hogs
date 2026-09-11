@@ -19,6 +19,7 @@ import {
   SLOP_KINDS,
   STARTING_MASS,
   applySlop,
+  battlePsychosis,
   battleRange,
   decayPsychosis,
   movePlayer,
@@ -83,6 +84,7 @@ interface SlopRow {
 interface AchievementProgressRow {
   total_slop: string;
   total_score: string;
+  knockouts: string;
   total_distance: number;
   high_psychosis_distance: number;
   current_high_psychosis_ms: string;
@@ -163,6 +165,7 @@ function mapAchievementProgress(row: AchievementProgressRow): AchievementProgres
   return {
     totalSlop: Number(row.total_slop),
     totalScore: Number(row.total_score),
+    knockouts: Number(row.knockouts),
     totalDistance: row.total_distance,
     highPsychosisDistance: row.high_psychosis_distance,
     currentHighPsychosisMs: Number(row.current_high_psychosis_ms),
@@ -189,7 +192,7 @@ async function readAchievementProgress(
   lock = false,
 ): Promise<AchievementProgress> {
   const result = await client.query<AchievementProgressRow>(
-    `SELECT total_slop, total_score, total_distance, high_psychosis_distance,
+    `SELECT total_slop, total_score, knockouts, total_distance, high_psychosis_distance,
             current_high_psychosis_ms, best_high_psychosis_ms, last_high_move_at,
             pops, runs, best_run_score, best_run_slop, current_run_distance,
             best_run_distance, kind_counts, run_kind_mask, max_run_variety,
@@ -217,7 +220,7 @@ async function persistAchievementProgress(
             pops=$9, runs=$10, best_run_score=$11, best_run_slop=$12,
             current_run_distance=$13, best_run_distance=$14, kind_counts=$15,
             run_kind_mask=$16, max_run_variety=$17, last_slop_kind=$18,
-            same_kind_streak=$19, best_same_kind_streak=$20,
+            same_kind_streak=$19, best_same_kind_streak=$20, knockouts=$21,
             updated_at=clock_timestamp()
       WHERE owner_did=$1`,
     [
@@ -241,6 +244,7 @@ async function persistAchievementProgress(
       progress.lastSlopKind,
       progress.sameKindStreak,
       progress.bestSameKindStreak,
+      progress.knockouts,
     ],
   );
 }
@@ -500,6 +504,7 @@ export async function actOnFarm(
         runScore: 0,
         runSlop: 0,
         popped: false,
+        knockouts: 0,
         restarted: true,
       });
     } else if (action.type === "bite" || action.type === "fart") {
@@ -507,6 +512,38 @@ export async function actOnFarm(
       if (row.last_attack_at && nowMs - row.last_attack_at.getTime() < ATTACK_COOLDOWN_MS) {
         throw new Error("Attack is cooling down");
       }
+      const attackerEffect = row.effect_expires_at?.getTime() && row.effect_expires_at.getTime() > nowMs
+        ? row.effect
+        : null;
+      if (action.type === "fart" && !action.targetId) {
+        const mass = battlePsychosis(row.mass, "fart");
+        await client.query(
+          `UPDATE farm_players
+              SET mass=$2, effect=$3,
+                  effect_expires_at=CASE WHEN $3::text IS NULL THEN NULL ELSE effect_expires_at END,
+                  last_attack_at=to_timestamp($4 / 1000.0),
+                  psychosis_updated_at=to_timestamp($4 / 1000.0),
+                  updated_at=to_timestamp($4 / 1000.0)
+            WHERE owner_did=$1`,
+          [ownerDid, mass, attackerEffect, nowMs],
+        );
+        events = [{ type: "psychosis_released", amount: row.mass - mass }];
+        nextAchievementProgress = advanceAchievementProgress(achievementProgress, {
+          distance: 0,
+          movementElapsedMs: 0,
+          movedAtHighPsychosis: false,
+          nowMs,
+          slopKind: null,
+          pointsGained: 0,
+          runScore: row.score,
+          runSlop: row.slop_eaten,
+          popped: false,
+          knockouts: 0,
+          restarted: false,
+        });
+      } else {
+      const targetId = action.targetId;
+      if (!targetId) throw new Error("Invalid farm action");
       const targetResult = await client.query<ActionPlayerRow & { handle: string | null }>(
         `SELECT player.owner_did, player.player_id, player.x, player.y, player.facing,
                 player.mass, player.score, player.slop_eaten, player.health, player.knockouts,
@@ -517,7 +554,7 @@ export async function actOnFarm(
            JOIN accounts account ON account.did=player.owner_did
           WHERE player.player_id=$1 AND player.owner_did<>$2
           FOR UPDATE OF player`,
-        [action.targetId, ownerDid],
+        [targetId, ownerDid],
       );
       const storedTarget = targetResult.rows[0];
       if (
@@ -532,9 +569,6 @@ export async function actOnFarm(
         status: storedTarget.status,
         psychosisUpdatedAtMs: storedTarget.psychosis_updated_at.getTime(),
       }, nowMs);
-      const attackerEffect = row.effect_expires_at?.getTime() && row.effect_expires_at.getTime() > nowMs
-        ? row.effect
-        : null;
       const targetEffect = storedTarget.effect_expires_at?.getTime()
         && storedTarget.effect_expires_at.getTime() > nowMs
         ? storedTarget.effect
@@ -615,8 +649,10 @@ export async function actOnFarm(
         runScore: row.score,
         runSlop: row.slop_eaten,
         popped: battle.attackerPopped,
+        knockouts: battle.targetDefeated ? 1 : 0,
         restarted: false,
       });
+      }
     } else {
       const moved = movePlayer({
         x: row.x,
@@ -675,6 +711,7 @@ export async function actOnFarm(
         runScore: state.score,
         runSlop: state.slopEaten,
         popped: events.some(event => event.type === "popped"),
+        knockouts: 0,
         restarted: false,
       });
       const psychosisUpdatedAtMs = consumed ? nowMs : row.psychosis_updated_at.getTime();

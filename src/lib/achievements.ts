@@ -2,7 +2,7 @@ import { SLOP_CATALOG, SLOP_KINDS, type SlopKind } from "./farm-game.ts";
 
 export const HIGH_PSYCHOSIS_MASS = 62;
 export const HIGH_PSYCHOSIS_GRACE_MS = 400;
-export const ACHIEVEMENT_CATALOG_VERSION = 1;
+export const ACHIEVEMENT_CATALOG_VERSION = 2;
 
 export const ACHIEVEMENT_CATEGORIES = [
   "consumption",
@@ -10,6 +10,7 @@ export const ACHIEVEMENT_CATEGORIES = [
   "movement",
   "psychosis",
   "survival",
+  "battle",
   "specialist",
   "style",
 ] as const;
@@ -23,6 +24,7 @@ export type AchievementScalarMetric =
   | "bestHighPsychosisMs"
   | "highPsychosisDistance"
   | "pops"
+  | "knockouts"
   | "runs"
   | "bestRunScore"
   | "bestRunSlop"
@@ -50,6 +52,7 @@ export interface AchievementProgress {
   bestHighPsychosisMs: number;
   lastHighMoveAtMs: number | null;
   pops: number;
+  knockouts: number;
   runs: number;
   bestRunScore: number;
   bestRunSlop: number;
@@ -83,6 +86,7 @@ export interface AchievementAdvance {
   runScore: number;
   runSlop: number;
   popped: boolean;
+  knockouts: number;
   restarted: boolean;
 }
 
@@ -329,6 +333,28 @@ const redeployments = ladder({
   unit: "count",
 });
 
+const knockouts = ladder({
+  prefix: "knockout",
+  titles: [
+    "First Bonk",
+    "Ham-to-Ham Combat",
+    "Pork Barrel Brawler",
+    "Battle-Hardened Bacon",
+    "Heavyweight Hog",
+  ],
+  descriptions: [
+    "Knock out another hog.",
+    "Knock out 5 hogs.",
+    "Knock out 10 hogs.",
+    "Knock out 25 hogs.",
+    "Knock out 100 hogs.",
+  ],
+  goals: [1, 5, 10, 25, 100],
+  category: "battle",
+  metric: "knockouts",
+  unit: "count",
+});
+
 const kindLadders: Record<SlopKind, {
   titles: readonly string[];
   finale: string;
@@ -422,6 +448,7 @@ export const ACHIEVEMENTS: readonly AchievementDefinition[] = [
   ...highPsychosisDistance,
   ...popping,
   ...redeployments,
+  ...knockouts,
   ...specialists,
   ...runScore,
   ...runSlop,
@@ -438,8 +465,8 @@ export const ACHIEVEMENTS: readonly AchievementDefinition[] = [
   },
 ];
 
-if (ACHIEVEMENTS.length !== 100) {
-  throw new Error(`Expected 100 achievements, received ${ACHIEVEMENTS.length}`);
+if (ACHIEVEMENTS.length !== 105) {
+  throw new Error(`Expected 105 achievements, received ${ACHIEVEMENTS.length}`);
 }
 
 export const ACHIEVEMENT_BY_ID = new Map(ACHIEVEMENTS.map(achievement => [achievement.id, achievement]));
@@ -454,6 +481,7 @@ export function emptyAchievementProgress(): AchievementProgress {
     bestHighPsychosisMs: 0,
     lastHighMoveAtMs: null,
     pops: 0,
+    knockouts: 0,
     runs: 1,
     bestRunScore: 0,
     bestRunSlop: 0,
@@ -484,6 +512,7 @@ export function advanceAchievementProgress(
       currentHighPsychosisMs: 0,
       lastHighMoveAtMs: null,
       runs: current.runs + 1,
+      knockouts: current.knockouts + input.knockouts,
       currentRunDistance: 0,
       runKindMask: 0,
       lastSlopKind: null,
@@ -529,6 +558,7 @@ export function advanceAchievementProgress(
     progress.lastSlopKind = kind;
   }
   if (input.popped) progress.pops += 1;
+  progress.knockouts += input.knockouts;
   return progress;
 }
 

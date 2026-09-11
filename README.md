@@ -3,9 +3,10 @@
 A retro multiplayer battle farm where Bluesky-linked pixel hogs roam together,
 eat short-lived AI slop for combat bonuses, and fight nearby hogs with Bite or
 Fart. Bite deals more damage but adds AI psychosis; Fart deals less damage and
-releases psychosis. Movement uses WASD, arrow keys, or the on-screen directional
-pad.
-One hundred persistent achievements reward lifetime consumption, score,
+releases psychosis, and can be used even when no opponent is in range. Movement
+uses WASD, arrow keys, or the on-screen directional pad. Knockouts unlock a
+dedicated ladder of persistent battle achievements.
+One hundred and five persistent achievements reward lifetime consumption, score,
 movement, high-psychosis streaks, specialist diets, and spectacular failure.
 Unlocked badges open a prefilled Bluesky post without granting the game
 permission to post on the player's behalf.

@@ -18,6 +18,7 @@ try {
   await pool.query("SELECT id FROM hog_lives LIMIT 0");
   await pool.query("SELECT player_id, health, knockouts, last_attack_at FROM farm_players LIMIT 0");
   await pool.query("SELECT id FROM farm_slop LIMIT 0");
+  await pool.query("SELECT knockouts FROM farm_achievement_progress LIMIT 0");
   const policy = loadCostPolicy();
   await expirePostPreviews(pool);
   const status = await transaction(pool, client => refreshOperationalStatus(client, {

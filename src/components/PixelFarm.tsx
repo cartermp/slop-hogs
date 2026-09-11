@@ -129,6 +129,9 @@ function eventMessage(event: FarmEvent): string {
       : `${Math.abs(event.psychosisDelta)} psychosis released`;
     return `${event.move.toUpperCase()} hit ${event.targetName} for ${event.damage}. ${psychosis}.${event.targetDefeated ? " KNOCKOUT!" : ` ${event.targetHealth} HP left.`}`;
   }
+  if (event.type === "psychosis_released") {
+    return `FART released ${event.amount} psychosis. No target required.`;
+  }
   if (event.type === "achievements_unlocked") {
     const names = event.achievementIds
       .map(id => ACHIEVEMENT_BY_ID.get(id)?.title)
@@ -256,7 +259,7 @@ export function PixelFarm() {
     && ownHog.status === "alive"
     && targetDistance <= battleRange("bite", ownHog, selectedTarget),
   );
-  const canFart = Boolean(
+  const canFartHit = Boolean(
     ownHog
     && selectedTarget
     && ownHog.status === "alive"
@@ -282,11 +285,21 @@ export function PixelFarm() {
   }
 
   async function attack(move: BattleMove) {
-    if (requestInFlight.current || !selectedTarget) return;
+    if (requestInFlight.current || !ownHog || ownHog.status !== "alive") return;
+    const target = selectedTarget;
+    let action: FarmAction;
+    if (move === "bite") {
+      if (!canBite || !target) return;
+      action = { type: "bite", targetId: target.id };
+    } else {
+      action = canFartHit && target
+        ? { type: "fart", targetId: target.id }
+        : { type: "fart" };
+    }
     requestInFlight.current = true;
     keys.current.clear();
     try {
-      await requestFarm({ type: move, targetId: selectedTarget.id });
+      await requestFarm(action);
     } catch (failure) {
       setError(failure instanceof Error ? failure.message : "Attack failed");
     } finally {
@@ -394,15 +407,15 @@ export function PixelFarm() {
               onClick={() => attack("bite")}
               disabled={!canBite || requestInFlight.current}
             >
-              [ BITE ]
+              [ BITE +7 PSI ]
             </button>
             <button
               type="button"
-              title="Light hit; releases up to 10 psychosis"
+              title="Always releases up to 10 psychosis; also hits a target in range"
               onClick={() => attack("fart")}
-              disabled={!canFart || requestInFlight.current}
+              disabled={!ownHog || ownHog.status !== "alive" || requestInFlight.current}
             >
-              [ FART ]
+              [ FART -10 PSI ]
             </button>
           </div>
           <div className="controls-copy">

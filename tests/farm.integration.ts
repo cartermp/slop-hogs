@@ -105,6 +105,15 @@ test("the shared farm persists players, claims slop once, pops, and restarts", a
     );
     assert.equal(farted.snapshot.players.find(player => player.isYou)?.mass, 45);
 
+    now += 900;
+    const vented = await actOnFarm(pool, dids[0], { type: "fart" }, now);
+    assert.equal(vented.events[0].type, "psychosis_released");
+    assert.equal(
+      vented.events[0].type === "psychosis_released" && vented.events[0].amount,
+      10,
+    );
+    assert.equal(vented.snapshot.players.find(player => player.isYou)?.mass, 35);
+
     await pool.query("UPDATE farm_players SET health=1 WHERE player_id=$1", [targetId]);
     now += 900;
     const defeated = await actOnFarm(pool, dids[0], { type: "fart", targetId }, now);
@@ -114,6 +123,8 @@ test("the shared farm persists players, claims slop once, pops, and restarts", a
     );
     assert.equal(defeated.snapshot.players.find(player => player.id === targetId)?.status, "defeated");
     assert.equal(defeated.snapshot.players.find(player => player.isYou)?.knockouts, 1);
+    assert.equal(defeated.snapshot.achievements.progress.knockouts, 1);
+    assert.ok(defeated.snapshot.achievements.unlocks.some(unlock => unlock.id === "knockout-1"));
 
     now += 1;
     const redeployed = await actOnFarm(pool, dids[1], { type: "restart" }, now);

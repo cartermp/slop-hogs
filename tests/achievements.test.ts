@@ -9,12 +9,13 @@ import {
   emptyAchievementProgress,
 } from "../src/lib/achievements.ts";
 
-test("the catalog contains 100 unique, measurable achievements", () => {
-  assert.equal(ACHIEVEMENTS.length, 100);
-  assert.equal(new Set(ACHIEVEMENTS.map(achievement => achievement.id)).size, 100);
+test("the catalog contains 105 unique, measurable achievements", () => {
+  assert.equal(ACHIEVEMENTS.length, 105);
+  assert.equal(new Set(ACHIEVEMENTS.map(achievement => achievement.id)).size, 105);
   assert.ok(ACHIEVEMENTS.every(achievement => achievement.goal > 0));
   assert.ok(ACHIEVEMENTS.some(achievement => achievement.metric === "bestHighPsychosisMs"));
   assert.ok(ACHIEVEMENTS.some(achievement => achievement.metric === "maxRunVariety"));
+  assert.ok(ACHIEVEMENTS.some(achievement => achievement.metric === "knockouts"));
   assert.ok(ACHIEVEMENTS.every(achievement => {
     const text = new URL(achievementShareUrl(achievement, "HOG-CAFE")).searchParams.get("text") ?? "";
     return [...text].length <= 300;
@@ -55,6 +56,7 @@ test("high-psychosis movement requires a continuous server-observed streak", () 
     runScore: 0,
     runSlop: 0,
     popped: false,
+    knockouts: 0,
     restarted: false,
   });
   const continuous = advanceAchievementProgress(first, {
@@ -67,6 +69,7 @@ test("high-psychosis movement requires a continuous server-observed streak", () 
     runScore: 0,
     runSlop: 0,
     popped: false,
+    knockouts: 0,
     restarted: false,
   });
   const afterGap = advanceAchievementProgress(continuous, {
@@ -79,6 +82,7 @@ test("high-psychosis movement requires a continuous server-observed streak", () 
     runScore: 0,
     runSlop: 0,
     popped: false,
+    knockouts: 0,
     restarted: false,
   });
   assert.equal(continuous.currentHighPsychosisMs, 240);
@@ -98,6 +102,7 @@ test("consumption progress tracks run variety, streaks, and lifetime totals", ()
     runScore: 300,
     runSlop: 1,
     popped: false,
+    knockouts: 0,
     restarted: false,
   };
   const first = advanceAchievementProgress(emptyAchievementProgress(), input);
@@ -108,4 +113,22 @@ test("consumption progress tracks run variety, streaks, and lifetime totals", ()
   assert.equal(second.maxRunVariety, 1);
   assert.equal(second.sameKindStreak, 2);
   assert.equal(second.bestRunScore, 600);
+});
+
+test("knockouts advance the battle achievement ladder", () => {
+  const progress = advanceAchievementProgress(emptyAchievementProgress(), {
+    distance: 0,
+    movementElapsedMs: 0,
+    movedAtHighPsychosis: false,
+    nowMs: 1_000,
+    slopKind: null,
+    pointsGained: 0,
+    runScore: 0,
+    runSlop: 0,
+    popped: false,
+    knockouts: 1,
+    restarted: false,
+  });
+  assert.equal(progress.knockouts, 1);
+  assert.ok(eligibleAchievements(progress).some(achievement => achievement.id === "knockout-1"));
 });

@@ -131,7 +131,7 @@ export interface FarmSnapshot {
 export type FarmAction =
   | { type: "move"; dx: -1 | 0 | 1; dy: -1 | 0 | 1 }
   | { type: "bite"; targetId: string }
-  | { type: "fart"; targetId: string }
+  | { type: "fart"; targetId?: string }
   | { type: "restart" };
 
 export type FarmEvent =
@@ -145,6 +145,7 @@ export type FarmEvent =
     psychosisDelta: number;
     targetDefeated: boolean;
   }
+  | { type: "psychosis_released"; amount: number }
   | { type: "popped" }
   | { type: "restarted" }
   | { type: "achievements_unlocked"; achievementIds: string[] };
@@ -195,6 +196,7 @@ export function parseFarmAction(value: unknown): FarmAction {
   }
   const action = value as Record<string, unknown>;
   if (action.type === "restart" && Object.keys(action).length === 1) return { type: "restart" };
+  if (action.type === "fart" && Object.keys(action).length === 1) return { type: "fart" };
   if (
     (action.type === "bite" || action.type === "fart")
     && Object.keys(action).length === 2
@@ -234,6 +236,12 @@ export function battleRange(
   return bodyReach + 24 + (attacker.effect === "turbo" ? 40 : 0);
 }
 
+export function battlePsychosis(mass: number, move: BattleMove): number {
+  return move === "bite"
+    ? Math.min(POPPING_MASS, mass + BITE_PSYCHOSIS)
+    : Math.max(STARTING_MASS, mass - FART_PSYCHOSIS_RELEASE);
+}
+
 export function resolveBattleAttack(
   attacker: BattleCombatant,
   target: BattleCombatant,
@@ -248,9 +256,7 @@ export function resolveBattleAttack(
   if (target.effect === "glitchy") damage -= 4;
   damage = Math.max(1, damage);
 
-  const mass = move === "bite"
-    ? Math.min(POPPING_MASS, attacker.mass + BITE_PSYCHOSIS)
-    : Math.max(STARTING_MASS, attacker.mass - FART_PSYCHOSIS_RELEASE);
+  const mass = battlePsychosis(attacker.mass, move);
   const health = Math.max(0, target.health - damage);
   const attackerPopped = mass >= POPPING_MASS;
   const targetDefeated = health === 0;

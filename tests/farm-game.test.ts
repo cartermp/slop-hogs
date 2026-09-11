@@ -46,6 +46,11 @@ test("farm actions accept only bounded directional input and restart", () => {
     parseFarmAction({ type: "bite", targetId: "8f22dca7-6df0-4a8c-aee6-60bc86b4866c" }),
     { type: "bite", targetId: "8f22dca7-6df0-4a8c-aee6-60bc86b4866c" },
   );
+  assert.deepEqual(parseFarmAction({ type: "fart" }), { type: "fart" });
+  assert.deepEqual(
+    parseFarmAction({ type: "fart", targetId: "8f22dca7-6df0-4a8c-aee6-60bc86b4866c" }),
+    { type: "fart", targetId: "8f22dca7-6df0-4a8c-aee6-60bc86b4866c" },
+  );
   assert.deepEqual(parseFarmAction({ type: "restart" }), { type: "restart" });
   for (const action of [
     null,
@@ -53,6 +58,7 @@ test("farm actions accept only bounded directional input and restart", () => {
     { type: "move", dx: 2, dy: 0 },
     { type: "move", dx: 0, dy: 0 },
     { type: "move", dx: 1, dy: 0, x: 500 },
+    { type: "bite" },
     { type: "fart", targetId: "not-a-player" },
     { type: "bite", targetId: "8f22dca7-6df0-4a8c-aee6-60bc86b4866c", damage: 99 },
     { type: "restart", now: NOW },
