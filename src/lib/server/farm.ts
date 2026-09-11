@@ -22,6 +22,7 @@ import { transaction } from "./database.ts";
 import { ReadOnlyError, refreshOperationalStatusForPool } from "./operations.ts";
 
 const ACTIVE_SLOP_COUNT = 16;
+const MAX_VISIBLE_PLAYERS = 64;
 const SLOP_MIN_LIFETIME_MS = 12_000;
 const SLOP_MAX_LIFETIME_MS = 22_000;
 const SPAWN_AREAS = [
@@ -154,8 +155,9 @@ async function readSnapshot(client: PoolClient, ownerDid: string, nowMs: number)
          FROM farm_players
         WHERE owner_did=$1
            OR updated_at > to_timestamp($2 / 1000.0)
-        ORDER BY player_id`,
-      [ownerDid, nowMs - ONLINE_WINDOW_MS],
+        ORDER BY (owner_did=$1) DESC, updated_at DESC, player_id
+        LIMIT $3`,
+      [ownerDid, nowMs - ONLINE_WINDOW_MS, MAX_VISIBLE_PLAYERS],
     ),
     client.query<SlopRow>(
       `SELECT id, kind, x, y, expires_at
