@@ -383,11 +383,11 @@ export async function syncFarm(pool: Pool, ownerDid: string, suppliedNowMs?: num
     }
     await ensurePlayer(client, ownerDid);
     await ensureAchievementProgress(client, ownerDid);
-    const initializeCatalog = await initializeAchievementCatalog(client, ownerDid);
     await client.query(
       "UPDATE farm_players SET updated_at=to_timestamp($2 / 1000.0) WHERE owner_did=$1",
       [ownerDid, nowMs],
     );
+    const initializeCatalog = await initializeAchievementCatalog(client, ownerDid);
     await maintainSlop(client, nowMs);
     if (initializeCatalog) {
       const progress = await readAchievementProgress(client, ownerDid);
@@ -413,7 +413,6 @@ export async function actOnFarm(
     const nowMs = await currentTimeMs(client, suppliedNowMs);
     await ensurePlayer(client, ownerDid);
     await ensureAchievementProgress(client, ownerDid);
-    const initializeCatalog = await initializeAchievementCatalog(client, ownerDid);
     const selected = await client.query<PlayerRow>(
       `SELECT owner_did, player_id, x, y, facing, mass, score, slop_eaten, status,
               effect, effect_expires_at, last_moved_at, updated_at
@@ -423,6 +422,7 @@ export async function actOnFarm(
       [ownerDid],
     );
     const row = selected.rows[0];
+    const initializeCatalog = await initializeAchievementCatalog(client, ownerDid);
     const achievementProgress = await readAchievementProgress(client, ownerDid, true);
     let nextAchievementProgress = achievementProgress;
     let events: FarmEvent[] = [];
