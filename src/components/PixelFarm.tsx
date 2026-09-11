@@ -1,6 +1,8 @@
 "use client";
 
 import { useCallback, useEffect, useRef, useState } from "react";
+import { AchievementCabinet } from "@/components/AchievementCabinet";
+import { ACHIEVEMENT_BY_ID } from "@/lib/achievements";
 import {
   FARM_HEIGHT,
   FARM_WIDTH,
@@ -36,7 +38,8 @@ function isFarmResult(value: unknown): value is FarmActionResult {
   const snapshot = result.snapshot as Record<string, unknown>;
   return typeof snapshot.serverNowMs === "number"
     && Array.isArray(snapshot.players)
-    && Array.isArray(snapshot.slop);
+    && Array.isArray(snapshot.slop)
+    && Boolean(snapshot.achievements);
 }
 
 function PixelHog({ player }: { player: FarmPlayer }) {
@@ -86,6 +89,14 @@ function PixelHog({ player }: { player: FarmPlayer }) {
 function eventMessage(event: FarmEvent): string {
   if (event.type === "slop_eaten") {
     return `${SLOP_CATALOG[event.kind].label}: +${event.massGained} mass / +${event.pointsGained} points`;
+  }
+  if (event.type === "achievements_unlocked") {
+    const names = event.achievementIds
+      .map(id => ACHIEVEMENT_BY_ID.get(id)?.title)
+      .filter((title): title is string => Boolean(title));
+    return names.length === 1
+      ? `ACHIEVEMENT UNLOCKED: ${names[0]}`
+      : `${names.length} ACHIEVEMENTS UNLOCKED: ${names.join(" / ")}`;
   }
   if (event.type === "restarted") return "Fresh hog deployed. Resume slopping.";
   return "CRITICAL MASS REACHED";
@@ -313,6 +324,13 @@ export function PixelFarm() {
           </div>
         </div>
       </section>
+
+      {snapshot && (
+        <AchievementCabinet
+          playerName={ownHog?.name ?? "UNKNOWN HOG"}
+          state={snapshot.achievements}
+        />
+      )}
 
       <section className="slop-legend" aria-labelledby="slop-guide-title">
         <div>

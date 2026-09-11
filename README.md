@@ -3,11 +3,15 @@
 A retro multiplayer farm game where Bluesky-linked pixel hogs roam together,
 eat short-lived AI slop, grow dangerously large, and eventually pop from AI
 psychosis. Movement uses WASD, arrow keys, or the on-screen directional pad.
+One hundred persistent achievements reward lifetime consumption, score,
+movement, high-psychosis streaks, specialist diets, and spectacular failure.
+Unlocked badges open a prefilled Bluesky post without granting the game
+permission to post on the player's behalf.
 
 The farm is server-authoritative and persisted in PostgreSQL. Player movement,
-pickup claims, timed slop expiration, effects, popping, and restarting are
-synchronized through `/api/farm`; the existing Bluesky login remains the
-identity boundary.
+pickup claims, timed slop expiration, effects, popping, restarting, achievement
+progress, and unlocks are synchronized through `/api/farm`; the existing
+Bluesky login remains the identity boundary.
 
 ## Run locally
 
