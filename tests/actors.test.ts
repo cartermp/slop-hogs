@@ -1,7 +1,7 @@
 import assert from "node:assert/strict";
 import { test } from "node:test";
 import { parseBlueskyHandle, parseBlueskyHandleQuery } from "../src/lib/bluesky-handles.ts";
-import { searchBlueskyActors } from "../src/lib/server/actors.ts";
+import { resolveBlueskyHandle, searchBlueskyActors } from "../src/lib/server/actors.ts";
 
 const limits = {
   externalRequestTimeoutMs: 1_000,
@@ -63,5 +63,23 @@ test("actor search rejects invalid and oversized provider responses", async () =
     searchBlueskyActors("valid.example", { ...limits, externalResponseMaxBytes: 5 }, async () =>
       Response.json({ actors: [] })),
     /size limit/,
+  );
+});
+
+test("profile lookup resolves and validates the canonical Bluesky handle", async () => {
+  let requestedUrl = "";
+  const handle = await resolveBlueskyHandle("did:plc:one", limits, async input => {
+    requestedUrl = String(input);
+    return Response.json({ did: "did:plc:one", handle: "PhillipCarter.dev" });
+  });
+  assert.equal(
+    requestedUrl,
+    "https://public.api.bsky.app/xrpc/app.bsky.actor.getProfile?actor=did%3Aplc%3Aone",
+  );
+  assert.equal(handle, "phillipcarter.dev");
+  await assert.rejects(
+    resolveBlueskyHandle("did:plc:one", limits, async () =>
+      Response.json({ did: "did:plc:other", handle: "phillipcarter.dev" })),
+    /invalid profile/,
   );
 });

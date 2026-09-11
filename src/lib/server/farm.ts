@@ -4,6 +4,7 @@ import {
   ONLINE_WINDOW_MS,
   STARTING_MASS,
   applySlop,
+  decayPsychosis,
   movePlayer,
   touchingSlop,
   type FarmAction,
@@ -44,8 +45,12 @@ interface PlayerRow {
   effect: HogEffect | null;
   effect_expires_at: Date | null;
   last_moved_at: Date;
+  psychosis_updated_at: Date;
   updated_at: Date;
+  handle: string | null;
 }
+
+type ActionPlayerRow = Omit<PlayerRow, "handle">;
 
 interface SlopRow {
   id: string;
@@ -114,19 +119,20 @@ async function maintainSlop(client: PoolClient, nowMs: number): Promise<void> {
   }
 }
 
-function displayName(playerId: string): string {
-  return `HOG-${playerId.slice(0, 4).toUpperCase()}`;
-}
-
 function mapPlayer(row: PlayerRow, ownerDid: string, nowMs: number): FarmPlayer {
   const effectActive = row.effect_expires_at !== null && row.effect_expires_at.getTime() > nowMs;
+  const psychosis = decayPsychosis({
+    mass: row.mass,
+    status: row.status,
+    psychosisUpdatedAtMs: row.psychosis_updated_at.getTime(),
+  }, nowMs);
   return {
     id: row.player_id,
-    name: displayName(row.player_id),
+    name: row.handle ?? row.owner_did,
     x: row.x,
     y: row.y,
     facing: row.facing,
-    mass: row.mass,
+    mass: psychosis.mass,
     score: row.score,
     slopEaten: row.slop_eaten,
     status: row.status,
@@ -150,12 +156,15 @@ function mapSlop(row: SlopRow): FarmSlop {
 async function readSnapshot(client: PoolClient, ownerDid: string, nowMs: number): Promise<FarmSnapshot> {
   const [players, slop] = await Promise.all([
     client.query<PlayerRow>(
-      `SELECT owner_did, player_id, x, y, facing, mass, score, slop_eaten, status,
-              effect, effect_expires_at, last_moved_at, updated_at
-         FROM farm_players
-        WHERE owner_did=$1
-           OR updated_at > to_timestamp($2 / 1000.0)
-        ORDER BY (owner_did=$1) DESC, updated_at DESC, player_id
+      `SELECT player.owner_did, player.player_id, player.x, player.y, player.facing,
+              player.mass, player.score, player.slop_eaten, player.status, player.effect,
+              player.effect_expires_at, player.last_moved_at, player.psychosis_updated_at,
+              player.updated_at, account.handle
+         FROM farm_players player
+         JOIN accounts account ON account.did=player.owner_did
+        WHERE player.owner_did=$1
+           OR player.updated_at > to_timestamp($2 / 1000.0)
+        ORDER BY (player.owner_did=$1) DESC, player.updated_at DESC, player.player_id
         LIMIT $3`,
       [ownerDid, nowMs - ONLINE_WINDOW_MS, MAX_VISIBLE_PLAYERS],
     ),
@@ -188,9 +197,24 @@ export async function syncFarm(pool: Pool, ownerDid: string, suppliedNowMs?: num
       return readSnapshot(client, ownerDid, nowMs);
     }
     await ensurePlayer(client, ownerDid);
+    const selected = await client.query<Pick<ActionPlayerRow, "mass" | "status" | "psychosis_updated_at">>(
+      `SELECT mass, status, psychosis_updated_at
+         FROM farm_players
+        WHERE owner_did=$1
+        FOR UPDATE`,
+      [ownerDid],
+    );
+    const psychosis = decayPsychosis({
+      mass: selected.rows[0].mass,
+      status: selected.rows[0].status,
+      psychosisUpdatedAtMs: selected.rows[0].psychosis_updated_at.getTime(),
+    }, nowMs);
     await client.query(
-      "UPDATE farm_players SET updated_at=to_timestamp($2 / 1000.0) WHERE owner_did=$1",
-      [ownerDid, nowMs],
+      `UPDATE farm_players
+          SET mass=$2, psychosis_updated_at=to_timestamp($3 / 1000.0),
+              updated_at=to_timestamp($4 / 1000.0)
+        WHERE owner_did=$1`,
+      [ownerDid, psychosis.mass, psychosis.psychosisUpdatedAtMs, nowMs],
     );
     await maintainSlop(client, nowMs);
     return readSnapshot(client, ownerDid, nowMs);
@@ -212,15 +236,25 @@ export async function actOnFarm(
   return transaction(pool, async client => {
     const nowMs = await currentTimeMs(client, suppliedNowMs);
     await ensurePlayer(client, ownerDid);
-    const selected = await client.query<PlayerRow>(
+    const selected = await client.query<ActionPlayerRow>(
       `SELECT owner_did, player_id, x, y, facing, mass, score, slop_eaten, status,
-              effect, effect_expires_at, last_moved_at, updated_at
+              effect, effect_expires_at, last_moved_at, psychosis_updated_at, updated_at
          FROM farm_players
         WHERE owner_did=$1
         FOR UPDATE`,
       [ownerDid],
     );
-    const row = selected.rows[0];
+    const storedRow = selected.rows[0];
+    const decayed = decayPsychosis({
+      mass: storedRow.mass,
+      status: storedRow.status,
+      psychosisUpdatedAtMs: storedRow.psychosis_updated_at.getTime(),
+    }, nowMs);
+    const row = {
+      ...storedRow,
+      mass: decayed.mass,
+      psychosis_updated_at: new Date(decayed.psychosisUpdatedAtMs),
+    };
     let events: FarmEvent[] = [];
 
     if (action.type === "restart") {
@@ -231,6 +265,7 @@ export async function actOnFarm(
             SET x=$2, y=$3, facing='right', mass=$4, score=0, slop_eaten=0,
                 status='alive', effect=NULL, effect_expires_at=NULL,
                 last_moved_at=to_timestamp($5 / 1000.0),
+                psychosis_updated_at=to_timestamp($5 / 1000.0),
                 updated_at=to_timestamp($5 / 1000.0), popped_at=NULL
           WHERE owner_did=$1`,
         [ownerDid, spawn.x, spawn.y, STARTING_MASS, nowMs],
@@ -280,6 +315,7 @@ export async function actOnFarm(
         effect: moved.effect,
         effectExpiresAtMs: moved.effectExpiresAtMs,
       };
+      const psychosisUpdatedAtMs = consumed ? nowMs : row.psychosis_updated_at.getTime();
       await client.query(
         `UPDATE farm_players
             SET x=$2, y=$3, facing=$4, mass=$5, score=$6, slop_eaten=$7,
@@ -287,9 +323,10 @@ export async function actOnFarm(
                   WHEN $10::float8 IS NULL THEN NULL
                   ELSE to_timestamp($10 / 1000.0)
                 END,
-                last_moved_at=to_timestamp($11 / 1000.0),
-                updated_at=to_timestamp($11 / 1000.0),
-                popped_at=CASE WHEN $8='popped' THEN to_timestamp($11 / 1000.0) ELSE NULL END
+                psychosis_updated_at=to_timestamp($11 / 1000.0),
+                last_moved_at=to_timestamp($12 / 1000.0),
+                updated_at=to_timestamp($12 / 1000.0),
+                popped_at=CASE WHEN $8='popped' THEN to_timestamp($12 / 1000.0) ELSE NULL END
           WHERE owner_did=$1`,
         [
           ownerDid,
@@ -302,6 +339,7 @@ export async function actOnFarm(
           state.status,
           state.effect,
           state.effectExpiresAtMs,
+          psychosisUpdatedAtMs,
           nowMs,
         ],
       );

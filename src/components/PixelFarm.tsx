@@ -8,6 +8,7 @@ import {
   SLOP_CATALOG,
   STARTING_MASS,
   hogDiameter,
+  psychosisLevel,
   type FarmAction,
   type FarmActionResult,
   type FarmEvent,
@@ -183,9 +184,7 @@ export function PixelFarm() {
   }, [requestFarm]);
 
   const ownHog = snapshot?.players.find(player => player.isYou) ?? null;
-  const massPercent = ownHog
-    ? (ownHog.mass - STARTING_MASS) / (POPPING_MASS - STARTING_MASS) * 100
-    : 0;
+  const massPercent = ownHog ? psychosisLevel(ownHog.mass) * 100 : 0;
 
   function setPad(direction: Direction, pressed: boolean) {
     if (pressed) keys.current.add(direction);
@@ -226,7 +225,7 @@ export function PixelFarm() {
           <div className="hud-stat"><small>SLOP EATEN</small><strong>{ownHog?.slopEaten ?? 0}</strong></div>
           <div className="hud-stat"><small>SCORE</small><strong>{String(ownHog?.score ?? 0).padStart(6, "0")}</strong></div>
           <div className="mass-meter">
-            <small>PSYCHOSIS / MASS</small>
+            <small>PSYCHOSIS</small>
             <div><i style={{ width: `${massPercent}%` }} /></div>
             <strong>{ownHog?.mass ?? STARTING_MASS} / {POPPING_MASS}</strong>
           </div>
