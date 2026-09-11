@@ -1,0 +1,27 @@
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 64 64" shape-rendering="crispEdges">
+  <title>Slop Hogs</title>
+  <rect width="64" height="64" rx="8" fill="#20121f"/>
+  <path fill="#7b4e36" d="M7 51h50v6H7z"/>
+
+  <path fill="#6d2948" d="M8 28h7v-8h5v5h-3v7H8z"/>
+  <path fill="#6d2948" d="M12 22h36v30H12z"/>
+  <path fill="#ef7fa1" d="M15 25h30v22H15z"/>
+  <path fill="#ffb0c5" d="M18 27h19v4H18z"/>
+  <path fill="#c9547e" d="M15 43h30v4H15z"/>
+
+  <path fill="#6d2948" d="M31 14h16v16H31z"/>
+  <path fill="#df668e" d="M34 17h10v10H34z"/>
+  <path fill="#ff9fba" d="M37 19h5v5h-5z"/>
+
+  <path fill="#6d2948" d="M42 29h18v18H42z"/>
+  <path fill="#ff9fba" d="M45 32h12v12H45z"/>
+  <path fill="#7b2e51" d="M49 36h3v5h-3zm6 1h2v4h-2z"/>
+
+  <path fill="#fff1c5" d="M38 28h6v6h-6z"/>
+  <path fill="#20121f" d="M41 30h3v4h-3z"/>
+
+  <path fill="#6d2948" d="M17 47h10v11H17zm20 0h10v11H37z"/>
+  <path fill="#d75d87" d="M20 47h4v8h-4zm20 0h4v8h-4z"/>
+
+  <path fill="#c8e85a" d="M54 45h5v5h-5zm3 5h3v5h-3z"/>
+</svg>
