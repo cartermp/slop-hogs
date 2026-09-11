@@ -1,4 +1,5 @@
 import { cookies } from "next/headers";
+import { FeedbackLinks } from "@/components/FeedbackLinks";
 import { LoginForm } from "@/components/LoginForm";
 import { PixelFarm } from "@/components/PixelFarm";
 import { getDatabase } from "@/lib/server/database";
@@ -45,6 +46,7 @@ export default async function Home({
         <div className="terminal-auth">
           <LoginForm />
         </div>
+        <FeedbackLinks variant="login" />
       </section>
     </main>
   );

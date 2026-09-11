@@ -44,6 +44,12 @@ try {
   assert.match(html, /Slop Hogs/);
   assert.match(html, /SLOP SYSTEMS PRESENTS/);
   assert.match(html, /Sign in with Bluesky/);
+  const issueLinks = [...html.matchAll(/href="(https:\/\/github\.com\/cartermp\/slop-hogs\/issues\/new\?[^"]+)"/g)]
+    .map(match => new URL(match[1].replaceAll("&amp;", "&")));
+  assert.equal(issueLinks.length, 2);
+  assert.deepEqual(issueLinks.map(link => link.searchParams.get("title")), ["[Feedback] ", "[Bug] "]);
+  assert.match(issueLinks[0].searchParams.get("body") ?? "", /What would make Slop Hogs better/);
+  assert.match(issueLinks[1].searchParams.get("body") ?? "", /Steps to reproduce/);
   assert.doesNotMatch(html, /SLOP SYSTEMS PRESENTS \/\/ \d{4}/);
   assert.doesNotMatch(html, /ROAM THE COMMUNAL FARM|EAT UNVERIFIED AI SLOP|GET BIG\. POP SPECTACULARLY/);
   assert.doesNotMatch(html, /IDENTITY BY BLUESKY|INSERT HOG/);
