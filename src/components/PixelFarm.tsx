@@ -326,7 +326,10 @@ export function PixelFarm() {
 
       <section className="game-console" aria-label="Slop Hogs multiplayer battle">
         <div className="hud">
-          <div className="hud-stat"><small>HOG</small><strong>{ownHog?.name ?? "LOADING..."}</strong></div>
+          <div className="hud-stat hud-hog">
+            <small>HOG</small>
+            <strong title={ownHog?.name}>{ownHog?.name ?? "LOADING..."}</strong>
+          </div>
           <div className="hud-stat"><small>KNOCKOUTS</small><strong>{ownHog?.knockouts ?? 0}</strong></div>
           <div className="hud-stat"><small>SCORE</small><strong>{String(ownHog?.score ?? 0).padStart(6, "0")}</strong></div>
           <div className="health-meter">
