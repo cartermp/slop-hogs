@@ -2,6 +2,7 @@ import { cookies } from "next/headers";
 import { FeedbackLinks } from "@/components/FeedbackLinks";
 import { LoginForm } from "@/components/LoginForm";
 import { PixelFarm } from "@/components/PixelFarm";
+import { canShareToBluesky } from "@/lib/auth";
 import { getDatabase } from "@/lib/server/database";
 import { getAccountSession } from "@/lib/server/hogs";
 
@@ -30,7 +31,9 @@ export default async function Home({
       : query.signed_in === "github" ? "GitHub verified your account. Entering the shared farm..."
       : query.signed_out === "1" ? "You are signed out." : null);
 
-  if (session) return <PixelFarm />;
+  if (session) {
+    return <PixelFarm canShareToBluesky={canShareToBluesky(session.authProvider)} />;
+  }
 
   return (
     <main className="login-screen">
