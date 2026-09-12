@@ -34,13 +34,24 @@ export default async function Home({
       <section className="login-terminal">
         <p className="pixel-kicker">SLOP SYSTEMS PRESENTS</p>
         <h1>SLOP<br /><span>HOGS</span></h1>
-        <div className="login-pig" aria-hidden="true">
-          <i className="hog-ear-pixel" />
-          <i className="hog-body-pixel" />
-          <i className="hog-eye-pixel" />
-          <i className="hog-snout-pixel" />
-          <i className="hog-leg-pixel leg-one" />
-          <i className="hog-leg-pixel leg-two" />
+        <p className="battle-royale-callout">A BATTLE ROYALE BETWEEN HOGS</p>
+        <p className="battle-royale-rules">Bite. Fart. Eat slop. Be the last hog standing.</p>
+        <div className="login-hog-stage" aria-hidden="true">
+          <div className="login-pig">
+            <i className="hog-tail-pixel" />
+            <i className="hog-ear-pixel" />
+            <i className="hog-body-pixel" />
+            <i className="hog-eye-pixel" />
+            <i className="hog-snout-pixel" />
+            <i className="hog-leg-pixel leg-one" />
+            <i className="hog-leg-pixel leg-two" />
+          </div>
+          <span className="battle-effect bite-effect login-bite-effect">
+            <i /><i /><i /><i /><b>CHOMP!</b>
+          </span>
+          <span className="battle-effect fart-effect login-fart-effect">
+            <i /><i /><i /><i /><b>PFFT!</b>
+          </span>
         </div>
         {notice && <p className={errorCode ? "terminal-notice terminal-error" : "terminal-notice"}>{notice}</p>}
         <div className="terminal-auth">

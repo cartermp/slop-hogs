@@ -43,6 +43,10 @@ try {
   const html = await response.text();
   assert.match(html, /Slop Hogs/);
   assert.match(html, /SLOP SYSTEMS PRESENTS/);
+  assert.match(html, /A BATTLE ROYALE BETWEEN HOGS/);
+  assert.match(html, /Bite\. Fart\. Eat slop\. Be the last hog standing\./);
+  assert.match(html, /CHOMP!/);
+  assert.match(html, /PFFT!/);
   assert.match(html, /Sign in with Bluesky/);
   const issueLinks = [...html.matchAll(/href="(https:\/\/github\.com\/cartermp\/slop-hogs\/issues\/new\?[^"]+)"/g)]
     .map(match => new URL(match[1].replaceAll("&amp;", "&")));
