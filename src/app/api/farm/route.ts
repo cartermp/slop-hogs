@@ -8,11 +8,29 @@ import { actOnFarm, syncFarm } from "@/lib/server/farm";
 import { getAccountSession, setAccountHandle } from "@/lib/server/hogs";
 import { logOperationalEvent } from "@/lib/server/logging";
 import { ReadOnlyError } from "@/lib/server/operations";
+import {
+  readBoundedJson,
+  RequestBodyTooLargeError,
+  TokenBucketRateLimiter,
+} from "@/lib/server/request-limits";
 
 export const runtime = "nodejs";
 export const dynamic = "force-dynamic";
 
 const cookieName = "slop_hogs_session";
+const farmActionMaxBytes = 1_024;
+const syncLimiter = new TokenBucketRateLimiter();
+const actionLimiter = new TokenBucketRateLimiter();
+
+function rateLimitedResponse() {
+  return Response.json(
+    { error: "Too many farm requests. Try again in a moment." },
+    {
+      status: 429,
+      headers: { "Cache-Control": "private, no-store", "Retry-After": "1" },
+    },
+  );
+}
 
 export async function GET() {
   const token = (await cookies()).get(cookieName)?.value;
@@ -21,8 +39,13 @@ export async function GET() {
     return Response.json({ error: "Sign in to enter the farm" }, { status: 401 });
   }
   try {
+    const policy = loadCostPolicy();
+    if (!syncLimiter.reserve(session.ownerDid, {
+      refillPerMinute: policy.limits.farmSyncsPerAccountPerMinute,
+      burst: policy.limits.farmSyncBurstPerAccount,
+    })) return rateLimitedResponse();
     if (!session.handle && session.authProvider === "bluesky") {
-      const handle = await resolveBlueskyHandle(session.ownerDid, loadCostPolicy().limits);
+      const handle = await resolveBlueskyHandle(session.ownerDid, policy.limits);
       await setAccountHandle(getDatabase(), session.ownerDid, handle);
     }
     const snapshot = await syncFarm(getDatabase(), session.ownerDid);
@@ -40,13 +63,25 @@ export async function GET() {
 }
 
 export async function POST(request: Request) {
-  const contentLength = Number(request.headers.get("content-length") ?? "0");
-  if (!Number.isFinite(contentLength) || contentLength > 1_024) {
-    return Response.json({ error: "Farm action is too large" }, { status: 413 });
-  }
   try {
+    const declaredLength = request.headers.get("content-length");
+    if (
+      declaredLength !== null
+      && (
+        !Number.isSafeInteger(Number(declaredLength))
+        || Number(declaredLength) < 0
+        || Number(declaredLength) > farmActionMaxBytes
+      )
+    ) {
+      return Response.json({ error: "Farm action is too large" }, { status: 413 });
+    }
     const { session } = await requireSameOriginSession(getDatabase());
-    const action = parseFarmAction(await request.json());
+    const policy = loadCostPolicy();
+    if (!actionLimiter.reserve(session.ownerDid, {
+      refillPerMinute: policy.limits.farmActionsPerAccountPerMinute,
+      burst: policy.limits.farmActionBurstPerAccount,
+    })) return rateLimitedResponse();
+    const action = parseFarmAction(await readBoundedJson(request, farmActionMaxBytes));
     const result = await actOnFarm(getDatabase(), session.ownerDid, action);
     if (result.events.length) {
       logOperationalEvent("farm.game_event", "success", {
@@ -57,7 +92,8 @@ export async function POST(request: Request) {
     return Response.json(result, { headers: { "Cache-Control": "private, no-store" } });
   } catch (error) {
     const message = error instanceof Error ? error.message : "";
-    const status = message === "Unauthorized" ? 401
+    const status = error instanceof RequestBodyTooLargeError ? 413
+      : message === "Unauthorized" ? 401
       : message === "Forbidden" ? 403
         : error instanceof ReadOnlyError ? 503
         : error instanceof SyntaxError
@@ -72,6 +108,7 @@ export async function POST(request: Request) {
     return Response.json(
       {
         error: status === 500 ? "The farm action failed"
+          : status === 413 ? "Farm action is too large"
           : status === 400 && (error instanceof SyntaxError || message === "Invalid farm action")
             ? "Invalid farm action"
             : status === 503 ? "The farm is temporarily read-only"

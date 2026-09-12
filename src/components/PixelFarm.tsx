@@ -204,14 +204,16 @@ export function PixelFarm({ canShareToBluesky }: { canShareToBluesky: boolean })
     setError(null);
   }, []);
 
-  const requestFarm = useCallback(async (action?: FarmAction) => {
+  const requestFarm = useCallback(async (action?: FarmAction, signal?: AbortSignal) => {
     const response = await fetch("/api/farm", action ? {
       method: "POST",
       headers: { "Content-Type": "application/json", accept: "application/json" },
       body: JSON.stringify(action),
+      signal,
     } : {
       headers: { accept: "application/json" },
       cache: "no-store",
+      signal,
     });
     const payload: unknown = await response.json();
     if (!response.ok || !isFarmResult(payload)) {
@@ -236,17 +238,43 @@ export function PixelFarm({ canShareToBluesky }: { canShareToBluesky: boolean })
 
   useEffect(() => {
     let active = true;
-    requestFarm().catch(failure => {
-      if (active) setError(failure instanceof Error ? failure.message : "The farm failed to load");
-    });
-    const poll = window.setInterval(() => {
-      requestFarm().catch(failure => {
-        if (active) setError(failure instanceof Error ? failure.message : "The farm failed to sync");
-      });
-    }, 900);
+    let syncing = false;
+    let poll: number | null = null;
+    let controller: AbortController | null = null;
+    const schedule = () => {
+      if (active && document.visibilityState === "visible") {
+        poll = window.setTimeout(sync, 900);
+      }
+    };
+    const sync = async () => {
+      if (!active || document.visibilityState !== "visible" || syncing) return;
+      syncing = true;
+      controller = new AbortController();
+      try {
+        await requestFarm(undefined, controller.signal);
+      } catch (failure) {
+        if (active && !(failure instanceof DOMException && failure.name === "AbortError")) {
+          setError(failure instanceof Error ? failure.message : "The farm failed to sync");
+        }
+      } finally {
+        syncing = false;
+        controller = null;
+        schedule();
+      }
+    };
+    const visibilityChanged = () => {
+      if (poll !== null) window.clearTimeout(poll);
+      poll = null;
+      if (document.visibilityState !== "visible") controller?.abort();
+      if (document.visibilityState === "visible") void sync();
+    };
+    void sync();
+    document.addEventListener("visibilitychange", visibilityChanged);
     return () => {
       active = false;
-      window.clearInterval(poll);
+      controller?.abort();
+      if (poll !== null) window.clearTimeout(poll);
+      document.removeEventListener("visibilitychange", visibilityChanged);
     };
   }, [requestFarm]);
 

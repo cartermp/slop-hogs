@@ -19,6 +19,15 @@ test("committed policy enables only enforced controls and keeps paid AI closed",
   assert.equal(policy.railway.computeHardLimitCents, 3_000);
   assert.deepEqual(
     {
+      syncs: policy.limits.farmSyncsPerAccountPerMinute,
+      syncBurst: policy.limits.farmSyncBurstPerAccount,
+      actions: policy.limits.farmActionsPerAccountPerMinute,
+      actionBurst: policy.limits.farmActionBurstPerAccount,
+    },
+    { syncs: 90, syncBurst: 5, actions: 600, actionBurst: 20 },
+  );
+  assert.deepEqual(
+    {
       sender: policy.limits.giftsPerSenderPerDay,
       recipient: policy.limits.giftsPerRecipientPerDay,
       pending: policy.limits.pendingGiftsPerRecipient,
