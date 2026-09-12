@@ -17,7 +17,9 @@ export async function register() {
       const { loadOAuthConfig } = await import("./lib/server/oauth-config.ts");
       try {
         loadOAuthConfig();
-        loadGitHubOAuthConfig();
+        if (process.env.GITHUB_CLIENT_ID || process.env.GITHUB_CLIENT_SECRET) {
+          loadGitHubOAuthConfig();
+        }
       } catch (error) {
         logOperationalEvent("service.startup", "failure", {
           startup_stage: "oauth_configuration_validation",

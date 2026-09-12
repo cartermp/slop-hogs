@@ -17,7 +17,7 @@ function isSuggestion(value: unknown): value is ActorSuggestion {
     && (typeof actor.displayName === "string" || actor.displayName === null);
 }
 
-export function LoginForm() {
+export function LoginForm({ githubLoginEnabled }: { githubLoginEnabled: boolean }) {
   const listboxId = useId();
   const selectedHandle = useRef<string | null>(null);
   const [handle, setHandle] = useState("");
@@ -161,12 +161,16 @@ export function LoginForm() {
           </button>
         </div>
       </form>
-      <p className="login-divider"><span>or</span></p>
-      <form className="github-login-form" action="/oauth/github/login" method="post">
-        <button className="auth-button github-auth-button" type="submit">
-          Sign in with GitHub
-        </button>
-      </form>
+      {githubLoginEnabled && (
+        <>
+          <p className="login-divider"><span>or</span></p>
+          <form className="github-login-form" action="/oauth/github/login" method="post">
+            <button className="auth-button github-auth-button" type="submit">
+              Sign in with GitHub
+            </button>
+          </form>
+        </>
+      )}
     </div>
   );
 }
