@@ -28,9 +28,11 @@ test("the shared farm persists players, claims slop once, pops, and restarts", a
     const first = joined.players.find(player => !player.isYou)!;
     await pool.query("DELETE FROM farm_slop");
     await pool.query(
-      `INSERT INTO farm_slop(id, kind, x, y, expires_at)
-       VALUES ($1,'premium_tokens',$2,$3,clock_timestamp() + interval '1 minute')`,
-      [randomUUID(), first.x, first.y],
+      `INSERT INTO farm_slop(id, field_id, kind, x, y, expires_at)
+       SELECT $1, field_id, 'premium_tokens', $2, $3, clock_timestamp() + interval '1 minute'
+         FROM farm_players
+        WHERE owner_did=$4`,
+      [randomUUID(), first.x, first.y, dids[0]],
     );
     now += 100;
     const ate = await actOnFarm(pool, dids[0], { type: "move", dx: 1, dy: 0 }, now);
@@ -74,9 +76,12 @@ test("the shared farm persists players, claims slop once, pops, and restarts", a
       [dids, now],
     );
     await pool.query(
-      `INSERT INTO farm_slop(id, kind, x, y, expires_at)
-       VALUES ($1,'hallucinated_citation',400,300,clock_timestamp() + interval '1 minute')`,
-      [randomUUID()],
+      `INSERT INTO farm_slop(id, field_id, kind, x, y, expires_at)
+       SELECT $1, field_id, 'hallucinated_citation', 400, 300,
+              clock_timestamp() + interval '1 minute'
+         FROM farm_players
+        WHERE owner_did=$2`,
+      [randomUUID(), dids[0]],
     );
     now += 200;
     const race = await Promise.all(
@@ -153,9 +158,12 @@ test("the shared farm persists players, claims slop once, pops, and restarts", a
       [dids[0], now],
     );
     await pool.query(
-      `INSERT INTO farm_slop(id, kind, x, y, expires_at)
-       VALUES ($1,'context_overflow',400,300,clock_timestamp() + interval '1 minute')`,
-      [randomUUID()],
+      `INSERT INTO farm_slop(id, field_id, kind, x, y, expires_at)
+       SELECT $1, field_id, 'context_overflow', 400, 300,
+              clock_timestamp() + interval '1 minute'
+         FROM farm_players
+        WHERE owner_did=$2`,
+      [randomUUID(), dids[0]],
     );
     now += 200;
     const popped = await actOnFarm(pool, dids[0], { type: "move", dx: -1, dy: 0 }, now);
@@ -177,6 +185,50 @@ test("the shared farm persists players, claims slop once, pops, and restarts", a
     await pool.query("DELETE FROM app_sessions WHERE owner_did=ANY($1)", [dids]);
     await pool.query("DELETE FROM hog_lives WHERE owner_did=ANY($1)", [dids]);
     await pool.query("DELETE FROM accounts WHERE did=ANY($1)", [dids]);
+    await pool.end();
+  }
+});
+
+test("concurrent arrivals join the same available field", async () => {
+  assert.ok(process.env.TEST_DATABASE_URL, "Set TEST_DATABASE_URL to a disposable PostgreSQL database");
+  const pool = createDatabase(process.env.TEST_DATABASE_URL);
+  const dids = Array.from({ length: 9 }, () => `did:plc:test${randomUUID().replaceAll("-", "")}`);
+  let now = Date.now();
+  try {
+    await migrate(pool);
+    await Promise.all(dids.map(did => provisionHog(pool, did)));
+
+    for (const did of dids.slice(0, 4)) {
+      await syncFarm(pool, did, now++);
+    }
+    await Promise.all(dids.slice(4, 7).map(did => syncFarm(pool, did, now)));
+    const friends = await Promise.all(dids.slice(4, 7).map(did => syncFarm(pool, did, now + 1)));
+    assert.ok(friends.every(snapshot => snapshot.players.length === 7));
+
+    const firstField = await pool.query<{ field_id: string }>(
+      "SELECT DISTINCT field_id FROM farm_players WHERE owner_did=ANY($1)",
+      [dids.slice(0, 7)],
+    );
+    assert.equal(firstField.rowCount, 1, "the existing hogs and concurrent arrivals share one field");
+
+    await Promise.all(dids.slice(7).map(did => syncFarm(pool, did, now + 1)));
+    const assignments = await pool.query<{ field_id: string; count: string }>(
+      `SELECT field_id, count(*)::text AS count
+         FROM farm_players
+        WHERE owner_did=ANY($1)
+        GROUP BY field_id
+        ORDER BY count(*) DESC`,
+      [dids],
+    );
+    assert.deepEqual(assignments.rows.map(row => Number(row.count)), [8, 1]);
+    assert.equal((await syncFarm(pool, dids[0], now + 2)).players.length, 8);
+    assert.equal((await syncFarm(pool, dids[8], now + 2)).players.length, 1);
+  } finally {
+    await pool.query("DELETE FROM farm_slop WHERE field_id IN (SELECT field_id FROM farm_players WHERE owner_did=ANY($1))", [dids]);
+    await pool.query("DELETE FROM app_sessions WHERE owner_did=ANY($1)", [dids]);
+    await pool.query("DELETE FROM hog_lives WHERE owner_did=ANY($1)", [dids]);
+    await pool.query("DELETE FROM accounts WHERE did=ANY($1)", [dids]);
+    await pool.query("DELETE FROM farm_fields WHERE NOT EXISTS (SELECT 1 FROM farm_players WHERE farm_players.field_id=farm_fields.id)");
     await pool.end();
   }
 });

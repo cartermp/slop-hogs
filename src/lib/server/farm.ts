@@ -41,6 +41,7 @@ import { transaction } from "./database.ts";
 import { ReadOnlyError, refreshOperationalStatusForPool } from "./operations.ts";
 
 const ACTIVE_SLOP_COUNT = 16;
+const FIELD_CAPACITY = 8;
 const MAX_VISIBLE_PLAYERS = 64;
 const SLOP_MIN_LIFETIME_MS = 12_000;
 const SLOP_MAX_LIFETIME_MS = 22_000;
@@ -53,6 +54,7 @@ const SPAWN_AREAS = [
 interface PlayerRow {
   owner_did: string;
   player_id: string;
+  field_id: string;
   x: number;
   y: number;
   facing: Facing;
@@ -122,14 +124,56 @@ async function currentTimeMs(client: PoolClient, supplied?: number): Promise<num
   )).rows[0].now_ms;
 }
 
-async function ensurePlayer(client: PoolClient, ownerDid: string): Promise<void> {
+async function ensurePlayer(client: PoolClient, ownerDid: string, nowMs: number): Promise<string> {
+  const activeAfterMs = nowMs - ONLINE_WINDOW_MS;
+  let current = await client.query<{ field_id: string; updated_at: Date }>(
+    "SELECT field_id, updated_at FROM farm_players WHERE owner_did=$1 FOR UPDATE",
+    [ownerDid],
+  );
+  if (current.rows[0]?.updated_at.getTime() >= activeAfterMs) {
+    return current.rows[0].field_id;
+  }
+
+  // Serialize matchmaking so a burst of arrivals packs into one field.
+  await client.query("SELECT pg_advisory_xact_lock(734009)");
+  current = await client.query<{ field_id: string; updated_at: Date }>(
+    "SELECT field_id, updated_at FROM farm_players WHERE owner_did=$1 FOR UPDATE",
+    [ownerDid],
+  );
+  if (current.rows[0]?.updated_at.getTime() >= activeAfterMs) {
+    return current.rows[0].field_id;
+  }
+
+  const available = await client.query<{ field_id: string }>(
+    `SELECT field.id AS field_id
+       FROM farm_fields field
+       JOIN farm_players player ON player.field_id=field.id
+      WHERE player.updated_at >= to_timestamp($1 / 1000.0)
+        AND player.owner_did<>$2
+      GROUP BY field.id, field.last_joined_at
+     HAVING count(*) < $3
+      ORDER BY field.last_joined_at DESC, field.id
+      LIMIT 1`,
+    [activeAfterMs, ownerDid, FIELD_CAPACITY],
+  );
+  const fieldId = available.rows[0]?.field_id ?? randomUUID();
+  if (!available.rowCount) {
+    await client.query("INSERT INTO farm_fields(id) VALUES ($1)", [fieldId]);
+  }
   const spawn = randomSpawn();
   await client.query(
-    `INSERT INTO farm_players(owner_did, x, y)
-     VALUES ($1,$2,$3)
-     ON CONFLICT (owner_did) DO NOTHING`,
-    [ownerDid, spawn.x, spawn.y],
+    `INSERT INTO farm_players(owner_did, field_id, x, y, updated_at)
+     VALUES ($1,$2,$3,$4,to_timestamp($5 / 1000.0))
+     ON CONFLICT (owner_did) DO UPDATE
+       SET field_id=EXCLUDED.field_id, x=EXCLUDED.x, y=EXCLUDED.y,
+           updated_at=EXCLUDED.updated_at`,
+    [ownerDid, fieldId, spawn.x, spawn.y, nowMs],
   );
+  await client.query(
+    "UPDATE farm_fields SET last_joined_at=clock_timestamp() WHERE id=$1",
+    [fieldId],
+  );
+  return fieldId;
 }
 
 async function ensureAchievementProgress(client: PoolClient, ownerDid: string): Promise<void> {
@@ -291,12 +335,14 @@ async function readAchievementState(client: PoolClient, ownerDid: string): Promi
   };
 }
 
-async function maintainSlop(client: PoolClient, nowMs: number): Promise<void> {
+async function maintainSlop(client: PoolClient, fieldId: string, nowMs: number): Promise<void> {
   await client.query("DELETE FROM farm_slop WHERE expires_at <= to_timestamp($1 / 1000.0)", [nowMs]);
   await client.query("SELECT pg_advisory_xact_lock(734005)");
   const count = Number((await client.query<{ count: string }>(
-    "SELECT count(*)::text AS count FROM farm_slop WHERE expires_at > to_timestamp($1 / 1000.0)",
-    [nowMs],
+    `SELECT count(*)::text AS count
+       FROM farm_slop
+      WHERE field_id=$1 AND expires_at > to_timestamp($2 / 1000.0)`,
+    [fieldId, nowMs],
   )).rows[0].count);
   for (let index = count; index < ACTIVE_SLOP_COUNT; index += 1) {
     const spawn = randomSpawn();
@@ -308,10 +354,11 @@ async function maintainSlop(client: PoolClient, nowMs: number): Promise<void> {
       "premium_tokens",
     ];
     await client.query(
-      `INSERT INTO farm_slop(id, kind, x, y, spawned_at, expires_at)
-       VALUES ($1,$2,$3,$4,to_timestamp($5 / 1000.0),to_timestamp($6 / 1000.0))`,
+      `INSERT INTO farm_slop(id, field_id, kind, x, y, spawned_at, expires_at)
+       VALUES ($1,$2,$3,$4,$5,to_timestamp($6 / 1000.0),to_timestamp($7 / 1000.0))`,
       [
         randomUUID(),
+        fieldId,
         kinds[randomInt(kinds.length)],
         spawn.x,
         spawn.y,
@@ -353,28 +400,35 @@ function mapSlop(row: SlopRow): FarmSlop {
   };
 }
 
-async function readSnapshot(client: PoolClient, ownerDid: string, nowMs: number): Promise<FarmSnapshot> {
+async function readSnapshot(
+  client: PoolClient,
+  ownerDid: string,
+  fieldId: string,
+  nowMs: number,
+): Promise<FarmSnapshot> {
   const [players, slop, achievements] = await Promise.all([
     client.query<PlayerRow>(
-      `SELECT player.owner_did, player.player_id, player.x, player.y, player.facing,
+      `SELECT player.owner_did, player.player_id, player.field_id,
+              player.x, player.y, player.facing,
               player.mass, player.score, player.slop_eaten, player.health, player.knockouts,
               player.status, player.effect, player.effect_expires_at, player.last_moved_at,
               player.last_attack_at, player.psychosis_movement_ms,
               player.updated_at, account.handle
          FROM farm_players player
          JOIN accounts account ON account.did=player.owner_did
-        WHERE player.owner_did=$1
-           OR player.updated_at > to_timestamp($2 / 1000.0)
+        WHERE player.field_id=$2
+          AND (player.owner_did=$1
+            OR player.updated_at >= to_timestamp($3 / 1000.0))
         ORDER BY (player.owner_did=$1) DESC, player.updated_at DESC, player.player_id
-        LIMIT $3`,
-      [ownerDid, nowMs - ONLINE_WINDOW_MS, MAX_VISIBLE_PLAYERS],
+        LIMIT $4`,
+      [ownerDid, fieldId, nowMs - ONLINE_WINDOW_MS, MAX_VISIBLE_PLAYERS],
     ),
     client.query<SlopRow>(
       `SELECT id, kind, x, y, expires_at
          FROM farm_slop
-        WHERE expires_at > to_timestamp($1 / 1000.0)
+        WHERE field_id=$1 AND expires_at > to_timestamp($2 / 1000.0)
         ORDER BY id`,
-      [nowMs],
+      [fieldId, nowMs],
     ),
     readAchievementState(client, ownerDid),
   ]);
@@ -395,11 +449,14 @@ export async function syncFarm(pool: Pool, ownerDid: string, suppliedNowMs?: num
   return transaction(pool, async client => {
     const nowMs = await currentTimeMs(client, suppliedNowMs);
     if (controls.readOnly) {
-      const existing = await client.query("SELECT 1 FROM farm_players WHERE owner_did=$1", [ownerDid]);
+      const existing = await client.query<{ field_id: string }>(
+        "SELECT field_id FROM farm_players WHERE owner_did=$1",
+        [ownerDid],
+      );
       if (!existing.rowCount) throw new ReadOnlyError("Slop Hogs is temporarily read-only");
-      return readSnapshot(client, ownerDid, nowMs);
+      return readSnapshot(client, ownerDid, existing.rows[0].field_id, nowMs);
     }
-    await ensurePlayer(client, ownerDid);
+    const fieldId = await ensurePlayer(client, ownerDid, nowMs);
     await ensureAchievementProgress(client, ownerDid);
     await client.query(
       `UPDATE farm_players
@@ -408,12 +465,12 @@ export async function syncFarm(pool: Pool, ownerDid: string, suppliedNowMs?: num
       [ownerDid, nowMs],
     );
     const initializeCatalog = await initializeAchievementCatalog(client, ownerDid);
-    await maintainSlop(client, nowMs);
+    await maintainSlop(client, fieldId, nowMs);
     if (initializeCatalog) {
       const progress = await readAchievementProgress(client, ownerDid);
       await unlockEligibleAchievements(client, ownerDid, progress);
     }
-    return readSnapshot(client, ownerDid, nowMs);
+    return readSnapshot(client, ownerDid, fieldId, nowMs);
   });
 }
 
@@ -431,13 +488,13 @@ export async function actOnFarm(
   if (controls.readOnly) throw new ReadOnlyError("Slop Hogs is temporarily read-only");
   return transaction(pool, async client => {
     const nowMs = await currentTimeMs(client, suppliedNowMs);
-    await ensurePlayer(client, ownerDid);
-    await ensureAchievementProgress(client, ownerDid);
     if (action.type === "bite" || action.type === "fart") {
       await client.query("SELECT pg_advisory_xact_lock(734008)");
     }
+    const fieldId = await ensurePlayer(client, ownerDid, nowMs);
+    await ensureAchievementProgress(client, ownerDid);
     const selected = await client.query<ActionPlayerRow>(
-      `SELECT owner_did, player_id, x, y, facing, mass, score, slop_eaten, health,
+      `SELECT owner_did, player_id, field_id, x, y, facing, mass, score, slop_eaten, health,
               knockouts, status, effect, effect_expires_at, last_moved_at,
               last_attack_at, psychosis_movement_ms, updated_at
          FROM farm_players
@@ -517,22 +574,23 @@ export async function actOnFarm(
         const targetId = action.targetId;
         if (!targetId) throw new Error("Invalid farm action");
         const targetResult = await client.query<ActionPlayerRow & { handle: string | null }>(
-          `SELECT player.owner_did, player.player_id, player.x, player.y, player.facing,
+          `SELECT player.owner_did, player.player_id, player.field_id,
+                  player.x, player.y, player.facing,
                   player.mass, player.score, player.slop_eaten, player.health, player.knockouts,
                   player.status, player.effect, player.effect_expires_at, player.last_moved_at,
                   player.last_attack_at, player.psychosis_movement_ms, player.updated_at,
                   account.handle
              FROM farm_players player
              JOIN accounts account ON account.did=player.owner_did
-            WHERE player.player_id=$1 AND player.owner_did<>$2
+            WHERE player.player_id=$1 AND player.owner_did<>$2 AND player.field_id=$3
             FOR UPDATE OF player`,
-          [targetId, ownerDid],
+          [targetId, ownerDid, fieldId],
         );
         const storedTarget = targetResult.rows[0];
         if (
           !storedTarget
           || storedTarget.status !== "alive"
-          || storedTarget.updated_at.getTime() <= nowMs - ONLINE_WINDOW_MS
+          || storedTarget.updated_at.getTime() < nowMs - ONLINE_WINDOW_MS
         ) {
           throw new Error("That opponent is no longer in the battle");
         }
@@ -633,8 +691,8 @@ export async function actOnFarm(
       const activeSlop = await client.query<SlopRow>(
         `SELECT id, kind, x, y, expires_at
            FROM farm_slop
-          WHERE expires_at > to_timestamp($1 / 1000.0)`,
-        [nowMs],
+          WHERE field_id=$1 AND expires_at > to_timestamp($2 / 1000.0)`,
+        [fieldId, nowMs],
       );
       const pickup = touchingSlop(moved, activeSlop.rows.map(mapSlop));
       const distance = Math.hypot(moved.x - row.x, moved.y - row.y);
@@ -649,8 +707,9 @@ export async function actOnFarm(
       let consumed: ReturnType<typeof applySlop> | null = null;
       if (pickup) {
         const deleted = await client.query(
-          "DELETE FROM farm_slop WHERE id=$1 AND expires_at > to_timestamp($2 / 1000.0)",
-          [pickup.id, nowMs],
+          `DELETE FROM farm_slop
+            WHERE id=$1 AND field_id=$2 AND expires_at > to_timestamp($3 / 1000.0)`,
+          [pickup.id, fieldId, nowMs],
         );
         if (deleted.rowCount === 1) {
           consumed = applySlop({
@@ -729,7 +788,7 @@ export async function actOnFarm(
       unlockCandidates,
     );
     if (unlocked.length) events.push({ type: "achievements_unlocked", achievementIds: unlocked });
-    await maintainSlop(client, nowMs);
-    return { snapshot: await readSnapshot(client, ownerDid, nowMs), events };
+    await maintainSlop(client, fieldId, nowMs);
+    return { snapshot: await readSnapshot(client, ownerDid, fieldId, nowMs), events };
   });
 }
