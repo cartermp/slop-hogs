@@ -454,8 +454,8 @@ test("real PostgreSQL persistence, retries, isolation and rollback", async () =>
     );
     const testDids = [did, otherDid, oauthDid, githubDid, postDid, legacyDid];
     assert.deepEqual(await previewTestDataCleanup(pool, testDids), {
-      accounts: 5,
-      hogLives: 5,
+      accounts: 6,
+      hogLives: 6,
       appSessions: 4,
       oauthSessions: 1,
       hogActions: 10,
@@ -464,8 +464,8 @@ test("real PostgreSQL persistence, retries, isolation and rollback", async () =>
       giftQuotaRows: 0,
     });
     assert.deepEqual(await deleteTestData(pool, testDids), {
-      accounts: 5,
-      hogLives: 5,
+      accounts: 6,
+      hogLives: 6,
       appSessions: 4,
       oauthSessions: 1,
       hogActions: 10,
