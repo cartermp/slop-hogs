@@ -969,10 +969,6 @@
   font: 8px/1.4 var(--pixel);
   box-shadow: 4px 4px 0 #a52f5b;
 }
-.terminal-auth .github-auth-button {
-  background: #f2edf0;
-  color: #171216;
-}
 .terminal-auth .login-divider {
   margin: 14px 0;
   font: 8px/1 var(--pixel);

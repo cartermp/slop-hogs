@@ -46,7 +46,6 @@ h1 { font-size: clamp(2.8rem, 8vw, 5.6rem); line-height: .98; letter-spacing: -.
 .login-options { max-width: 38rem; }
 .github-login-form { max-width: 38rem; }
 .github-login-form .auth-button { width: 100%; }
-.github-auth-button { background: #f2edf0; }
 .login-divider {
   display: flex;
   align-items: center;

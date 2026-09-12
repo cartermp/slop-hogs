@@ -62,9 +62,7 @@ export default async function Home({
         </div>
         {notice && <p className={errorCode ? "terminal-notice terminal-error" : "terminal-notice"}>{notice}</p>}
         <div className="terminal-auth">
-          <LoginForm githubLoginEnabled={Boolean(
-            process.env.GITHUB_CLIENT_ID && process.env.GITHUB_CLIENT_SECRET
-          )} />
+          <LoginForm />
         </div>
         <FeedbackLinks variant="login" />
       </section>
