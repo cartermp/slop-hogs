@@ -16,6 +16,8 @@ const server = spawn(process.execPath, ["node_modules/next/dist/bin/next", "star
     APP_ORIGIN: "https://hogs.example",
     OAUTH_PRIVATE_KEY: privateKey.export({ type: "pkcs8", format: "pem" }).toString(),
     OAUTH_ENCRYPTION_KEY: randomBytes(32).toString("base64"),
+    GITHUB_CLIENT_ID: "Ov23liSmokeTestClient",
+    GITHUB_CLIENT_SECRET: "0123456789abcdef0123456789abcdef01234567",
     TRUSTED_PROXY_COUNT: "1",
   },
   stdio: ["ignore", "pipe", "pipe"],

@@ -13,9 +13,11 @@ export async function register() {
       process.exit(1);
     }
     if (process.env.NODE_ENV === "production") {
+      const { loadGitHubOAuthConfig } = await import("./lib/server/github-oauth.ts");
       const { loadOAuthConfig } = await import("./lib/server/oauth-config.ts");
       try {
         loadOAuthConfig();
+        loadGitHubOAuthConfig();
       } catch (error) {
         logOperationalEvent("service.startup", "failure", {
           startup_stage: "oauth_configuration_validation",

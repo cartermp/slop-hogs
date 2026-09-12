@@ -29,7 +29,7 @@ npm run dev
 If you use nvm and need to install the pinned default, run `nvm install` and `nvm use` first.
 
 Open http://localhost:3000. The title screen does not require a provider
-account. Entering the battle farm requires PostgreSQL and at least one OAuth
+account. Entering the battle farm requires PostgreSQL and provider OAuth
 configuration.
 
 In development, open http://localhost:3000/gallery to compare the mutation-composed six-meal AI image, generated post, chatbot screenshot, human post, and shitpost builds. The gallery returns a normal not-found page in production.

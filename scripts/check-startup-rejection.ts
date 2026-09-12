@@ -21,6 +21,8 @@ try {
     APP_ORIGIN: "https://hogs.example",
     OAUTH_PRIVATE_KEY: privateKey.export({ type: "pkcs8", format: "pem" }).toString(),
     OAUTH_ENCRYPTION_KEY: randomBytes(32).toString("base64"),
+    GITHUB_CLIENT_ID: "Ov23liStartupTestClient",
+    GITHUB_CLIENT_SECRET: "0123456789abcdef0123456789abcdef01234567",
     TRUSTED_PROXY_COUNT: "1",
   };
 
@@ -47,6 +49,10 @@ try {
   const oauthEvent = rejectedStartup({ OAUTH_PRIVATE_KEY: "" });
   assert.equal(oauthEvent.startup_stage, "oauth_configuration_validation");
   assert.equal(oauthEvent.error_message, "OAUTH_PRIVATE_KEY is required");
+
+  const githubEvent = rejectedStartup({ GITHUB_CLIENT_SECRET: "" });
+  assert.equal(githubEvent.startup_stage, "oauth_configuration_validation");
+  assert.match(githubEvent.error_message, /GITHUB_CLIENT_SECRET/);
 
   input.paidAiMonthlyBudgetCents = 1;
   writeFileSync(join(directory, "config/cost-policy.json"), JSON.stringify(input));
