@@ -10,13 +10,14 @@ interface TokenBucket {
   updatedAtMs: number;
 }
 
-const IDLE_BUCKET_TTL_MS = 10 * 60 * 1_000;
-
 export class TokenBucketRateLimiter {
   private readonly buckets = new Map<string, TokenBucket>();
   private readonly maximumKeys: number;
 
   constructor(maximumKeys = 10_000) {
+    if (!Number.isSafeInteger(maximumKeys) || maximumKeys <= 0) {
+      throw new Error("Token bucket capacity must be a positive integer");
+    }
     this.maximumKeys = maximumKeys;
   }
 
@@ -31,10 +32,8 @@ export class TokenBucketRateLimiter {
     }
     let bucket = this.buckets.get(key);
     if (!bucket) {
-      if (this.buckets.size >= this.maximumKeys) this.removeIdleBuckets(nowMs);
-      if (this.buckets.size >= this.maximumKeys) return false;
+      if (this.buckets.size >= this.maximumKeys) this.removeOldestBucket();
       bucket = { tokens: policy.burst, updatedAtMs: nowMs };
-      this.buckets.set(key, bucket);
     }
     const elapsedMs = Math.max(0, nowMs - bucket.updatedAtMs);
     bucket.tokens = Math.min(
@@ -42,23 +41,24 @@ export class TokenBucketRateLimiter {
       bucket.tokens + elapsedMs * policy.refillPerMinute / 60_000,
     );
     bucket.updatedAtMs = Math.max(bucket.updatedAtMs, nowMs);
+    this.buckets.delete(key);
+    this.buckets.set(key, bucket);
     if (bucket.tokens < 1) return false;
     bucket.tokens -= 1;
     return true;
   }
 
-  private removeIdleBuckets(nowMs: number): void {
-    for (const [key, bucket] of this.buckets) {
-      if (bucket.updatedAtMs <= nowMs - IDLE_BUCKET_TTL_MS) this.buckets.delete(key);
-    }
+  private removeOldestBucket(): void {
+    const oldestKey = this.buckets.keys().next().value;
+    if (oldestKey !== undefined) this.buckets.delete(oldestKey);
   }
 }
 
 export class RequestBodyTooLargeError extends Error {}
 
-export function sessionRateLimitKey(token: string): string | null {
-  if (!/^[0-9a-f]{64}$/.test(token)) return null;
-  return createHash("sha256").update(token).digest("hex");
+export function rateLimitKey(namespace: string, source: string): string {
+  if (!namespace || !source) throw new Error("Rate-limit key input is required");
+  return createHash("sha256").update(`${namespace}:${source}`).digest("hex");
 }
 
 export async function readBoundedJson(request: Request, maxBytes: number): Promise<unknown> {

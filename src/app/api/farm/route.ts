@@ -6,12 +6,14 @@ import { loadCostPolicy } from "@/lib/server/cost-policy";
 import { getDatabase } from "@/lib/server/database";
 import { actOnFarm, syncFarm } from "@/lib/server/farm";
 import { getAccountSession, setAccountHandle } from "@/lib/server/hogs";
+import { requestSource } from "@/lib/server/hourly-rate-limit";
 import { logOperationalEvent } from "@/lib/server/logging";
 import { ReadOnlyError } from "@/lib/server/operations";
+import { loadTrustedProxyCount } from "@/lib/server/proxy-config";
 import {
+  rateLimitKey,
   readBoundedJson,
   RequestBodyTooLargeError,
-  sessionRateLimitKey,
   TokenBucketRateLimiter,
 } from "@/lib/server/request-limits";
 
@@ -19,10 +21,11 @@ export const runtime = "nodejs";
 export const dynamic = "force-dynamic";
 
 const cookieName = "slop_hogs_session";
+const sessionToken = /^[0-9a-f]{64}$/;
 const farmActionMaxBytes = 1_024;
-const preAuthSyncLimiter = new TokenBucketRateLimiter();
+const sourceAdmissionLimiter = new TokenBucketRateLimiter();
+const globalAdmissionLimiter = new TokenBucketRateLimiter(1);
 const accountSyncLimiter = new TokenBucketRateLimiter();
-const preAuthActionLimiter = new TokenBucketRateLimiter();
 const accountActionLimiter = new TokenBucketRateLimiter();
 
 function rateLimitedResponse() {
@@ -35,19 +38,34 @@ function rateLimitedResponse() {
   );
 }
 
-export async function GET() {
+function reserveAdmission(request: Request, policy: ReturnType<typeof loadCostPolicy>): boolean {
+  const source = requestSource(request, loadTrustedProxyCount());
+  const sourceAllowed = sourceAdmissionLimiter.reserve(
+    rateLimitKey("farm", source),
+    {
+      refillPerMinute: policy.limits.farmRequestsPerIpPerMinute,
+      burst: policy.limits.farmRequestBurstPerIp,
+    },
+  );
+  if (!sourceAllowed) return false;
+  return globalAdmissionLimiter.reserve("farm", {
+    refillPerMinute: policy.limits.farmRequestsGlobalPerMinute,
+    burst: policy.limits.farmRequestGlobalBurst,
+  });
+}
+
+export async function GET(request: Request) {
   const token = (await cookies()).get(cookieName)?.value;
-  const tokenKey = token ? sessionRateLimitKey(token) : null;
-  if (!token || !tokenKey) {
+  if (!token || !sessionToken.test(token)) {
     return Response.json({ error: "Sign in to enter the farm" }, { status: 401 });
   }
   try {
     const policy = loadCostPolicy();
+    if (!reserveAdmission(request, policy)) return rateLimitedResponse();
     const limits = {
       refillPerMinute: policy.limits.farmSyncsPerAccountPerMinute,
       burst: policy.limits.farmSyncBurstPerAccount,
     };
-    if (!preAuthSyncLimiter.reserve(tokenKey, limits)) return rateLimitedResponse();
     const session = await getAccountSession(getDatabase(), token);
     if (!session) {
       return Response.json({ error: "Sign in to enter the farm" }, { status: 401 });
@@ -85,14 +103,13 @@ export async function POST(request: Request) {
       return Response.json({ error: "Farm action is too large" }, { status: 413 });
     }
     const token = await requireSameOriginToken();
-    const tokenKey = sessionRateLimitKey(token);
-    if (!tokenKey) throw new Error("Unauthorized");
+    if (!sessionToken.test(token)) throw new Error("Unauthorized");
     const policy = loadCostPolicy();
+    if (!reserveAdmission(request, policy)) return rateLimitedResponse();
     const limits = {
       refillPerMinute: policy.limits.farmActionsPerAccountPerMinute,
       burst: policy.limits.farmActionBurstPerAccount,
     };
-    if (!preAuthActionLimiter.reserve(tokenKey, limits)) return rateLimitedResponse();
     const session = await getAccountSession(getDatabase(), token);
     if (!session) throw new Error("Unauthorized");
     if (!accountActionLimiter.reserve(session.ownerDid, limits)) return rateLimitedResponse();

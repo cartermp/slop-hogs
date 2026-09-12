@@ -1,5 +1,5 @@
 {
-  "version": 5,
+  "version": 6,
   "railway": {
     "usageAlertCents": 1500,
     "computeHardLimitCents": 3000
@@ -13,6 +13,10 @@
     "farmSyncBurstPerAccount": 5,
     "farmActionsPerAccountPerMinute": 600,
     "farmActionBurstPerAccount": 20,
+    "farmRequestsPerIpPerMinute": 1200,
+    "farmRequestBurstPerIp": 40,
+    "farmRequestsGlobalPerMinute": 2400,
+    "farmRequestGlobalBurst": 80,
     "postLookupsPerAccountPerDay": 12,
     "postLookupsGlobalPerHour": 100,
     "giftsPerSenderPerDay": 3,
