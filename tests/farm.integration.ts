@@ -222,7 +222,11 @@ test("concurrent arrivals join the same available field", async () => {
     );
     assert.deepEqual(assignments.rows.map(row => Number(row.count)), [8, 1]);
     assert.equal((await syncFarm(pool, dids[0], now + 2)).players.length, 8);
-    assert.equal((await syncFarm(pool, dids[8], now + 2)).players.length, 1);
+    const singleton = await pool.query<{ owner_did: string }>(
+      "SELECT owner_did FROM farm_players WHERE field_id=$1",
+      [assignments.rows.find(row => Number(row.count) === 1)!.field_id],
+    );
+    assert.equal((await syncFarm(pool, singleton.rows[0].owner_did, now + 2)).players.length, 1);
   } finally {
     await pool.query("DELETE FROM farm_slop WHERE field_id IN (SELECT field_id FROM farm_players WHERE owner_did=ANY($1))", [dids]);
     await pool.query("DELETE FROM app_sessions WHERE owner_did=ANY($1)", [dids]);
