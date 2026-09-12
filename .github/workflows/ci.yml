@@ -45,7 +45,7 @@ jobs:
           path: |
             .next/cache
             tsconfig.tsbuildinfo
-          key: ${{ runner.os }}-node-${{ matrix.node }}-compiler-${{ hashFiles('package-lock.json') }}-${{ hashFiles('**/*.ts', '**/*.tsx') }}
+          key: ${{ runner.os }}-node-${{ matrix.node }}-compiler-${{ hashFiles('package-lock.json') }}-${{ hashFiles('src/**', 'tests/**', 'scripts/**', 'next.config.ts', 'tsconfig.json') }}
           restore-keys: |
             ${{ runner.os }}-node-${{ matrix.node }}-compiler-${{ hashFiles('package-lock.json') }}-
       - run: npm ci --engine-strict --no-audit --no-fund
