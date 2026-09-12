@@ -19,6 +19,28 @@ test("committed policy enables only enforced controls and keeps paid AI closed",
   assert.equal(policy.railway.computeHardLimitCents, 3_000);
   assert.deepEqual(
     {
+      syncs: policy.limits.farmSyncsPerAccountPerMinute,
+      syncBurst: policy.limits.farmSyncBurstPerAccount,
+      actions: policy.limits.farmActionsPerAccountPerMinute,
+      actionBurst: policy.limits.farmActionBurstPerAccount,
+      sourceRequests: policy.limits.farmRequestsPerIpPerMinute,
+      sourceBurst: policy.limits.farmRequestBurstPerIp,
+      globalRequests: policy.limits.farmRequestsGlobalPerMinute,
+      globalBurst: policy.limits.farmRequestGlobalBurst,
+    },
+    {
+      syncs: 90,
+      syncBurst: 5,
+      actions: 600,
+      actionBurst: 20,
+      sourceRequests: 1_200,
+      sourceBurst: 40,
+      globalRequests: 2_400,
+      globalBurst: 80,
+    },
+  );
+  assert.deepEqual(
+    {
       sender: policy.limits.giftsPerSenderPerDay,
       recipient: policy.limits.giftsPerRecipientPerDay,
       pending: policy.limits.pendingGiftsPerRecipient,
@@ -94,6 +116,20 @@ test("policy version, AI budget and image storage relationships are checked", ()
   const input = fixture();
   input.limits.cardStorageMaxBytes = input.limits.cardMaxBytes - 1;
   assert.throws(() => parseCostPolicy(input));
+});
+
+test("farm request bursts cannot exceed their refill limits", () => {
+  for (const [rate, burst] of [
+    ["farmSyncsPerAccountPerMinute", "farmSyncBurstPerAccount"],
+    ["farmActionsPerAccountPerMinute", "farmActionBurstPerAccount"],
+    ["farmRequestsPerIpPerMinute", "farmRequestBurstPerIp"],
+    ["farmRequestsGlobalPerMinute", "farmRequestGlobalBurst"],
+  ]) {
+    const input = fixture();
+    input.limits[rate] = 1;
+    input.limits[burst] = 2;
+    assert.throws(() => parseCostPolicy(input), /bursts cannot exceed/);
+  }
 });
 
 test("database budget and thresholds can only become stricter", () => {
