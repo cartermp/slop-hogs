@@ -2,7 +2,7 @@ FROM node:24.19.0-bookworm-slim AS build
 WORKDIR /app
 ENV NEXT_TELEMETRY_DISABLED=1
 COPY package.json package-lock.json ./
-RUN npm ci --engine-strict
+RUN npm ci --engine-strict --no-audit --no-fund
 COPY . .
 RUN npm run build
 
