@@ -6,11 +6,13 @@ import { createGameState, parseGameState } from "../src/lib/game.ts";
 import { createDatabase, transaction } from "../src/lib/server/database.ts";
 import { migrate } from "../src/lib/server/migrations.ts";
 import {
+  completeGitHubSignIn,
   completeOAuthSignIn,
   cleanHog,
   DuplicatePostError,
   feedHog,
   feedHogFromPost,
+  getAccountSession,
   getAppSession,
   getHogView,
   issueSession,
@@ -43,6 +45,8 @@ test("real PostgreSQL persistence, retries, isolation and rollback", async () =>
   const did = `did:plc:test${randomUUID().replaceAll("-", "")}`;
   const otherDid = `did:plc:test${randomUUID().replaceAll("-", "")}`;
   const oauthDid = `did:plc:test${randomUUID().replaceAll("-", "")}`;
+  const githubUserId = BigInt(`0x${randomUUID().replaceAll("-", "")}`).toString().slice(0, 19);
+  const githubDid = `did:github:${githubUserId}`;
   const postDid = `did:plc:test${randomUUID().replaceAll("-", "")}`;
   const legacyDid = `did:plc:test${randomUUID().replaceAll("-", "")}`;
   const postRecordKey = randomUUID().replaceAll("-", "");
@@ -130,6 +134,17 @@ test("real PostgreSQL persistence, retries, isolation and rollback", async () =>
     assert.equal(rotated.hogId, authenticated.hogId, "returning verified accounts retain their active hog");
     assert.equal(await getAppSession(pool, authenticated.token), null, "a new login rotates the app session");
     assert.equal((await getAppSession(pool, rotated.token))?.ownerDid, oauthDid);
+    const githubSession = await completeGitHubSignIn(pool, githubUserId, "octocat");
+    assert.deepEqual(await getAccountSession(pool, githubSession.token), {
+      ownerDid: githubDid,
+      hogId: githubSession.hogId,
+      handle: "octocat",
+      authProvider: "github",
+    });
+    assert.deepEqual(await revokeSession(pool, githubSession.token), {
+      ownerDid: githubDid,
+      authProvider: "github",
+    });
     const oauthRequest = randomUUID();
     const oauthResult = await feedHog(pool, rotated.token, rotated.hogId, oauthRequest, action);
     const mutationResult = await feedHog(pool, rotated.token, rotated.hogId, randomUUID(), action);
@@ -437,10 +452,10 @@ test("real PostgreSQL persistence, retries, isolation and rollback", async () =>
       "INSERT INTO oauth_sessions(did, encrypted_data) VALUES ($1,$2)",
       [oauthDid, Buffer.alloc(30)],
     );
-    const testDids = [did, otherDid, oauthDid, postDid, legacyDid];
+    const testDids = [did, otherDid, oauthDid, githubDid, postDid, legacyDid];
     assert.deepEqual(await previewTestDataCleanup(pool, testDids), {
-      accounts: 5,
-      hogLives: 5,
+      accounts: 6,
+      hogLives: 6,
       appSessions: 4,
       oauthSessions: 1,
       hogActions: 10,
@@ -449,8 +464,8 @@ test("real PostgreSQL persistence, retries, isolation and rollback", async () =>
       giftQuotaRows: 0,
     });
     assert.deepEqual(await deleteTestData(pool, testDids), {
-      accounts: 5,
-      hogLives: 5,
+      accounts: 6,
+      hogLives: 6,
       appSessions: 4,
       oauthSessions: 1,
       hogActions: 10,

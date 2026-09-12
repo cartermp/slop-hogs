@@ -10,7 +10,10 @@ const messages: Record<string, string> = {
   invalid_handle: "Enter a valid Bluesky handle.",
   login_unavailable: "Bluesky login is temporarily unavailable. Please try again.",
   login_rate_limited: "Too many login attempts. Please wait and try again.",
-  provider_logout: "You are signed out here, but Bluesky could not be reached to revoke the provider session.",
+  github_invalid_callback: "GitHub could not verify that login. Please start again.",
+  github_login_canceled: "GitHub login was canceled.",
+  github_login_unavailable: "GitHub login is temporarily unavailable. Please try again.",
+  provider_logout: "You are signed out here, but the provider session could not be revoked.",
 };
 
 export default async function Home({
@@ -24,6 +27,7 @@ export default async function Home({
   const errorCode = typeof query.auth_error === "string" ? query.auth_error : "";
   const notice = messages[errorCode]
     ?? (query.signed_in === "1" ? "Bluesky verified your account. Entering the shared farm..."
+      : query.signed_in === "github" ? "GitHub verified your account. Entering the shared farm..."
       : query.signed_out === "1" ? "You are signed out." : null);
 
   if (session) return <PixelFarm />;
@@ -55,7 +59,9 @@ export default async function Home({
         </div>
         {notice && <p className={errorCode ? "terminal-notice terminal-error" : "terminal-notice"}>{notice}</p>}
         <div className="terminal-auth">
-          <LoginForm />
+          <LoginForm githubLoginEnabled={Boolean(
+            process.env.GITHUB_CLIENT_ID && process.env.GITHUB_CLIENT_SECRET
+          )} />
         </div>
         <FeedbackLinks variant="login" />
       </section>

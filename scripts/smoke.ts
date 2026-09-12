@@ -16,6 +16,8 @@ const server = spawn(process.execPath, ["node_modules/next/dist/bin/next", "star
     APP_ORIGIN: "https://hogs.example",
     OAUTH_PRIVATE_KEY: privateKey.export({ type: "pkcs8", format: "pem" }).toString(),
     OAUTH_ENCRYPTION_KEY: randomBytes(32).toString("base64"),
+    GITHUB_CLIENT_ID: "Ov23liSmokeTestClient",
+    GITHUB_CLIENT_SECRET: "0123456789abcdef0123456789abcdef01234567",
     TRUSTED_PROXY_COUNT: "1",
   },
   stdio: ["ignore", "pipe", "pipe"],
@@ -48,6 +50,7 @@ try {
   assert.match(html, /CHOMP!/);
   assert.match(html, /PFFT!/);
   assert.match(html, /Sign in with Bluesky/);
+  assert.match(html, /Sign in with GitHub/);
   const issueLinks = [...html.matchAll(/href="(https:\/\/github\.com\/cartermp\/slop-hogs\/issues\/new\?[^"]+)"/g)]
     .map(match => new URL(match[1].replaceAll("&amp;", "&")));
   assert.equal(issueLinks.length, 2);

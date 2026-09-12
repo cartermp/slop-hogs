@@ -1,6 +1,6 @@
 # Slop Hogs
 
-A retro multiplayer battle farm where Bluesky-linked pixel hogs roam together,
+A retro multiplayer battle farm where Bluesky- or GitHub-linked pixel hogs roam together,
 eat short-lived AI slop for combat bonuses, and fight nearby hogs with Bite or
 Fart. Bite deals more damage but adds AI psychosis; Fart deals less damage and
 releases psychosis, and can be used even when no opponent is in range. Movement
@@ -14,7 +14,7 @@ permission to post on the player's behalf.
 The farm is server-authoritative and persisted in PostgreSQL. Player movement,
 pickup claims, timed slop expiration, effects, battle damage, knockouts,
 popping, redeployment, achievement progress, and unlocks are synchronized
-through `/api/farm`; the existing Bluesky login remains the identity boundary.
+through `/api/farm`; verified Bluesky and GitHub logins form the identity boundary.
 
 ## Run locally
 
@@ -29,12 +29,12 @@ npm run dev
 If you use nvm and need to install the pinned default, run `nvm install` and `nvm use` first.
 
 Open http://localhost:3000. The title screen does not require a provider
-account. Entering the battle farm requires PostgreSQL and Bluesky OAuth
+account. Entering the battle farm requires PostgreSQL and provider OAuth
 configuration.
 
 In development, open http://localhost:3000/gallery to compare the mutation-composed six-meal AI image, generated post, chatbot screenshot, human post, and shitpost builds. The gallery returns a normal not-found page in production.
 
-The shell and gallery still run without auth configuration. To exercise OAuth, configure PostgreSQL as described in [database development](docs/database.md), run migrations, and set `APP_ORIGIN`, `OAUTH_PRIVATE_KEY`, `OAUTH_ENCRYPTION_KEY`, and `SLOP_HOGS_OWNER_DIDS`. Generate the two secrets with:
+The shell and gallery still run without auth configuration. To exercise Bluesky OAuth, configure PostgreSQL as described in [database development](docs/database.md), run migrations, and set `APP_ORIGIN`, `OAUTH_PRIVATE_KEY`, `OAUTH_ENCRYPTION_KEY`, and `SLOP_HOGS_OWNER_DIDS`. Generate the two secrets with:
 
 ```sh
 openssl genpkey -algorithm EC -pkeyopt ec_paramgen_curve:P-256
@@ -42,6 +42,12 @@ openssl rand -base64 32
 ```
 
 The P-256 private key signs OAuth client authentication with ES256; the 32-byte key encrypts SDK state and provider sessions in PostgreSQL. Keep both outside the repository. OAuth metadata and callbacks require the exact configured origin; production must use HTTPS.
+
+For GitHub login, register an OAuth app with the homepage set to `APP_ORIGIN`
+and the authorization callback set to
+`APP_ORIGIN/oauth/github/callback`. Configure `GITHUB_CLIENT_ID` and
+`GITHUB_CLIENT_SECRET`; the app requests no OAuth scopes, reads the verified
+numeric user ID and login, and immediately discards the provider token.
 
 ## Check a change
 
