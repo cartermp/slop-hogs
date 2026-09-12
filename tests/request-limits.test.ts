@@ -3,6 +3,7 @@ import { test } from "node:test";
 import {
   readBoundedJson,
   RequestBodyTooLargeError,
+  sessionRateLimitKey,
   TokenBucketRateLimiter,
 } from "../src/lib/server/request-limits.ts";
 
@@ -23,6 +24,16 @@ test("token buckets fail closed when the bounded key set is full", () => {
   assert.equal(limiter.reserve("alice", policy, 0), true);
   assert.equal(limiter.reserve("bob", policy, 1), false);
   assert.equal(limiter.reserve("bob", policy, 10 * 60 * 1_000), true);
+});
+
+test("session rate-limit keys accept only valid tokens and do not retain secrets", () => {
+  const token = "a".repeat(64);
+  const key = sessionRateLimitKey(token);
+  assert.match(key ?? "", /^[0-9a-f]{64}$/);
+  assert.notEqual(key, token);
+  for (const invalid of ["", "a".repeat(63), "A".repeat(64), "g".repeat(64)]) {
+    assert.equal(sessionRateLimitKey(invalid), null);
+  }
 });
 
 test("bounded JSON accepts small bodies and rejects declared or streamed excess", async () => {

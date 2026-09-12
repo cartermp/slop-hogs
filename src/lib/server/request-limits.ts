@@ -1,3 +1,5 @@
+import { createHash } from "node:crypto";
+
 export interface TokenBucketPolicy {
   refillPerMinute: number;
   burst: number;
@@ -53,6 +55,11 @@ export class TokenBucketRateLimiter {
 }
 
 export class RequestBodyTooLargeError extends Error {}
+
+export function sessionRateLimitKey(token: string): string | null {
+  if (!/^[0-9a-f]{64}$/.test(token)) return null;
+  return createHash("sha256").update(token).digest("hex");
+}
 
 export async function readBoundedJson(request: Request, maxBytes: number): Promise<unknown> {
   const declaredLength = request.headers.get("content-length");

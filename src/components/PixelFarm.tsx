@@ -226,7 +226,11 @@ export function PixelFarm({ canShareToBluesky }: { canShareToBluesky: boolean })
   }, [acceptResult]);
 
   const sendMovement = useCallback(() => {
-    if (requestInFlight.current || keys.current.size === 0) return;
+    if (
+      document.visibilityState !== "visible"
+      || requestInFlight.current
+      || keys.current.size === 0
+    ) return;
     const dx = (keys.current.has("right") ? 1 : 0) - (keys.current.has("left") ? 1 : 0);
     const dy = (keys.current.has("down") ? 1 : 0) - (keys.current.has("up") ? 1 : 0);
     if (dx === 0 && dy === 0) return;
@@ -265,7 +269,10 @@ export function PixelFarm({ canShareToBluesky }: { canShareToBluesky: boolean })
     const visibilityChanged = () => {
       if (poll !== null) window.clearTimeout(poll);
       poll = null;
-      if (document.visibilityState !== "visible") controller?.abort();
+      if (document.visibilityState !== "visible") {
+        keys.current.clear();
+        controller?.abort();
+      }
       if (document.visibilityState === "visible") void sync();
     };
     void sync();

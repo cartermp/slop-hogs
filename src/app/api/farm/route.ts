@@ -1,6 +1,6 @@
 import { cookies } from "next/headers";
 import { parseFarmAction } from "@/lib/farm-game";
-import { requireSameOriginSession } from "@/lib/server/action-auth";
+import { requireSameOriginToken } from "@/lib/server/action-auth";
 import { resolveBlueskyHandle } from "@/lib/server/actors";
 import { loadCostPolicy } from "@/lib/server/cost-policy";
 import { getDatabase } from "@/lib/server/database";
@@ -11,6 +11,7 @@ import { ReadOnlyError } from "@/lib/server/operations";
 import {
   readBoundedJson,
   RequestBodyTooLargeError,
+  sessionRateLimitKey,
   TokenBucketRateLimiter,
 } from "@/lib/server/request-limits";
 
@@ -19,8 +20,10 @@ export const dynamic = "force-dynamic";
 
 const cookieName = "slop_hogs_session";
 const farmActionMaxBytes = 1_024;
-const syncLimiter = new TokenBucketRateLimiter();
-const actionLimiter = new TokenBucketRateLimiter();
+const preAuthSyncLimiter = new TokenBucketRateLimiter();
+const accountSyncLimiter = new TokenBucketRateLimiter();
+const preAuthActionLimiter = new TokenBucketRateLimiter();
+const accountActionLimiter = new TokenBucketRateLimiter();
 
 function rateLimitedResponse() {
   return Response.json(
@@ -34,16 +37,22 @@ function rateLimitedResponse() {
 
 export async function GET() {
   const token = (await cookies()).get(cookieName)?.value;
-  const session = token ? await getAccountSession(getDatabase(), token) : null;
-  if (!session) {
+  const tokenKey = token ? sessionRateLimitKey(token) : null;
+  if (!token || !tokenKey) {
     return Response.json({ error: "Sign in to enter the farm" }, { status: 401 });
   }
   try {
     const policy = loadCostPolicy();
-    if (!syncLimiter.reserve(session.ownerDid, {
+    const limits = {
       refillPerMinute: policy.limits.farmSyncsPerAccountPerMinute,
       burst: policy.limits.farmSyncBurstPerAccount,
-    })) return rateLimitedResponse();
+    };
+    if (!preAuthSyncLimiter.reserve(tokenKey, limits)) return rateLimitedResponse();
+    const session = await getAccountSession(getDatabase(), token);
+    if (!session) {
+      return Response.json({ error: "Sign in to enter the farm" }, { status: 401 });
+    }
+    if (!accountSyncLimiter.reserve(session.ownerDid, limits)) return rateLimitedResponse();
     if (!session.handle && session.authProvider === "bluesky") {
       const handle = await resolveBlueskyHandle(session.ownerDid, policy.limits);
       await setAccountHandle(getDatabase(), session.ownerDid, handle);
@@ -75,12 +84,18 @@ export async function POST(request: Request) {
     ) {
       return Response.json({ error: "Farm action is too large" }, { status: 413 });
     }
-    const { session } = await requireSameOriginSession(getDatabase());
+    const token = await requireSameOriginToken();
+    const tokenKey = sessionRateLimitKey(token);
+    if (!tokenKey) throw new Error("Unauthorized");
     const policy = loadCostPolicy();
-    if (!actionLimiter.reserve(session.ownerDid, {
+    const limits = {
       refillPerMinute: policy.limits.farmActionsPerAccountPerMinute,
       burst: policy.limits.farmActionBurstPerAccount,
-    })) return rateLimitedResponse();
+    };
+    if (!preAuthActionLimiter.reserve(tokenKey, limits)) return rateLimitedResponse();
+    const session = await getAccountSession(getDatabase(), token);
+    if (!session) throw new Error("Unauthorized");
+    if (!accountActionLimiter.reserve(session.ownerDid, limits)) return rateLimitedResponse();
     const action = parseFarmAction(await readBoundedJson(request, farmActionMaxBytes));
     const result = await actOnFarm(getDatabase(), session.ownerDid, action);
     if (result.events.length) {
