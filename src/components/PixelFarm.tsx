@@ -160,7 +160,7 @@ function eventMessage(event: FarmEvent): string {
   return "CRITICAL MASS REACHED";
 }
 
-export function PixelFarm() {
+export function PixelFarm({ canShareToBluesky }: { canShareToBluesky: boolean }) {
   const [snapshot, setSnapshot] = useState<FarmSnapshot | null>(null);
   const [notice, setNotice] = useState<string | null>(null);
   const [error, setError] = useState<string | null>(null);
@@ -518,6 +518,7 @@ export function PixelFarm() {
 
       {snapshot && (
         <AchievementCabinet
+          canShareToBluesky={canShareToBluesky}
           playerName={ownHog?.name ?? "UNKNOWN HOG"}
           state={snapshot.achievements}
         />

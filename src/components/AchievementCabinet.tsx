@@ -9,9 +9,11 @@ import {
 } from "@/lib/achievements";
 
 export function AchievementCabinet({
+  canShareToBluesky,
   playerName,
   state,
 }: {
+  canShareToBluesky: boolean;
   playerName: string;
   state: AchievementState;
 }) {
@@ -27,8 +29,8 @@ export function AchievementCabinet({
         <strong>{String(unlocked.size).padStart(3, "0")} / {ACHIEVEMENTS.length} UNLOCKED</strong>
       </div>
       <p className="achievement-intro">
-        Lifetime progress survives every redeployment. Unlocked badges are saved to your account
-        and can be announced through Bluesky without granting Slop Hogs posting permission.
+        Lifetime progress survives every redeployment. Unlocked badges are saved to your account.
+        {canShareToBluesky && " Share them through Bluesky without granting Slop Hogs posting permission."}
       </p>
       <div className="achievement-grid">
         {ACHIEVEMENTS.map(achievement => {
@@ -51,7 +53,7 @@ export function AchievementCabinet({
                 </div>
                 <small>{formatAchievementProgress(progress, achievement)}</small>
               </div>
-              {isUnlocked && (
+              {isUnlocked && canShareToBluesky && (
                 <a
                   className="achievement-share"
                   href={achievementShareUrl(achievement, playerName)}

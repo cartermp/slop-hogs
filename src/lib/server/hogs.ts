@@ -1,5 +1,6 @@
 import { createHash, randomBytes, randomUUID } from "node:crypto";
 import type { Pool, PoolClient } from "pg";
+import type { AuthProvider } from "../auth.ts";
 import {
   applyGameAction,
   advanceGameTime,
@@ -65,8 +66,6 @@ export interface AppSession {
   ownerDid: string;
   hogId: string;
 }
-
-export type AuthProvider = "bluesky" | "github";
 
 export interface AccountSession {
   ownerDid: string;
