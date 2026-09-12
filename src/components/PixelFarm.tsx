@@ -516,14 +516,6 @@ export function PixelFarm({ canShareToBluesky }: { canShareToBluesky: boolean })
         </div>
       </section>
 
-      {snapshot && (
-        <AchievementCabinet
-          canShareToBluesky={canShareToBluesky}
-          playerName={ownHog?.name ?? "UNKNOWN HOG"}
-          state={snapshot.achievements}
-        />
-      )}
-
       <section className="slop-legend" aria-labelledby="slop-guide-title">
         <div>
           <p className="pixel-kicker">FIELD MANUAL</p>
@@ -539,6 +531,14 @@ export function PixelFarm({ canShareToBluesky }: { canShareToBluesky: boolean })
           </article>
         ))}
       </section>
+
+      {snapshot && (
+        <AchievementCabinet
+          canShareToBluesky={canShareToBluesky}
+          playerName={ownHog?.name ?? "UNKNOWN HOG"}
+          state={snapshot.achievements}
+        />
+      )}
     </main>
   );
 }

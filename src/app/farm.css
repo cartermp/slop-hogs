@@ -12,7 +12,7 @@
 }
 
 .game-shell {
-  width: min(100% - 24px, 1280px);
+  width: min(100% - 24px, 960px);
   margin: 0 auto;
   padding: 24px 0 50px;
   color: var(--cream);
