@@ -223,6 +223,17 @@ export function PixelFarm({ canShareToBluesky }: { canShareToBluesky: boolean })
     acceptResult(payload, Boolean(action));
   }, [acceptResult]);
 
+  const sendMovement = useCallback(() => {
+    if (requestInFlight.current || keys.current.size === 0) return;
+    const dx = (keys.current.has("right") ? 1 : 0) - (keys.current.has("left") ? 1 : 0);
+    const dy = (keys.current.has("down") ? 1 : 0) - (keys.current.has("up") ? 1 : 0);
+    if (dx === 0 && dy === 0) return;
+    requestInFlight.current = true;
+    requestFarm({ type: "move", dx: dx as -1 | 0 | 1, dy: dy as -1 | 0 | 1 })
+      .catch(failure => setError(failure instanceof Error ? failure.message : "Movement failed"))
+      .finally(() => { requestInFlight.current = false; });
+  }, [requestFarm]);
+
   useEffect(() => {
     let active = true;
     requestFarm().catch(failure => {
@@ -244,8 +255,13 @@ export function PixelFarm({ canShareToBluesky }: { canShareToBluesky: boolean })
       const direction = movementKeys.get(event.key.toLowerCase());
       if (!direction) return;
       event.preventDefault();
-      if (pressed) keys.current.add(direction);
-      else keys.current.delete(direction);
+      if (pressed) {
+        const firstPress = !keys.current.has(direction);
+        keys.current.add(direction);
+        if (firstPress) sendMovement();
+      } else {
+        keys.current.delete(direction);
+      }
     };
     const down = (event: KeyboardEvent) => changeKey(event, true);
     const up = (event: KeyboardEvent) => changeKey(event, false);
@@ -258,21 +274,12 @@ export function PixelFarm({ canShareToBluesky }: { canShareToBluesky: boolean })
       window.removeEventListener("keyup", up);
       window.removeEventListener("blur", blur);
     };
-  }, []);
+  }, [sendMovement]);
 
   useEffect(() => {
-    const movement = window.setInterval(() => {
-      if (requestInFlight.current || keys.current.size === 0) return;
-      const dx = (keys.current.has("right") ? 1 : 0) - (keys.current.has("left") ? 1 : 0);
-      const dy = (keys.current.has("down") ? 1 : 0) - (keys.current.has("up") ? 1 : 0);
-      if (dx === 0 && dy === 0) return;
-      requestInFlight.current = true;
-      requestFarm({ type: "move", dx: dx as -1 | 0 | 1, dy: dy as -1 | 0 | 1 })
-        .catch(failure => setError(failure instanceof Error ? failure.message : "Movement failed"))
-        .finally(() => { requestInFlight.current = false; });
-    }, 120);
+    const movement = window.setInterval(sendMovement, 120);
     return () => window.clearInterval(movement);
-  }, [requestFarm]);
+  }, [sendMovement]);
 
   const ownHog = snapshot?.players.find(player => player.isYou) ?? null;
   const opponents = useMemo(
@@ -304,8 +311,13 @@ export function PixelFarm({ canShareToBluesky }: { canShareToBluesky: boolean })
   );
 
   function setPad(direction: Direction, pressed: boolean) {
-    if (pressed) keys.current.add(direction);
-    else keys.current.delete(direction);
+    if (pressed) {
+      const firstPress = !keys.current.has(direction);
+      keys.current.add(direction);
+      if (firstPress) sendMovement();
+    } else {
+      keys.current.delete(direction);
+    }
   }
 
   async function restart() {
