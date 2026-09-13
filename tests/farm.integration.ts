@@ -248,7 +248,7 @@ test("single-player runs and achievements persist separately", async () => {
     await provisionHog(pool, did);
     const started = await actOnSinglePlayer(pool, did, { type: "start", difficulty: "easy" }, now);
     assert.equal(started.snapshot.singlePlayer.difficulty, "easy");
-    assert.equal(started.snapshot.players.length, 2);
+    assert.equal(started.snapshot.players.length, 3);
     assert.ok(started.snapshot.singlePlayer.achievements.unlocks.some(
       unlock => unlock.id === "solo-table-for-one",
     ));
@@ -266,7 +266,16 @@ test("single-player runs and achievements persist separately", async () => {
       [did],
     )).rows[0].state;
     const player = stored.player as { x: number; y: number };
-    const bots = stored.bots as Array<{ x: number; y: number; health: number }>;
+    const bots = stored.bots as Array<{
+      x: number;
+      y: number;
+      health: number;
+      status: "alive" | "popped" | "defeated";
+    }>;
+    for (const bot of bots.slice(1)) {
+      bot.health = 0;
+      bot.status = "defeated";
+    }
     bots[0].x = player.x + 10;
     bots[0].y = player.y;
     bots[0].health = 1;

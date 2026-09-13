@@ -16,6 +16,7 @@ import {
   parseSinglePlayerState,
   singlePlayerRunStatus,
 } from "../src/lib/single-player.ts";
+import { KNOCKOUT_RUSH_DURATION_MS } from "../src/lib/farm-game.ts";
 
 const NOW = 2_000_000;
 
@@ -39,17 +40,45 @@ test("single-player actions require a supported difficulty and bot target", () =
   );
 });
 
-test("difficulty changes bot count, durability, aggression, and slop supply", () => {
+test("difficulty ramps bot count, durability, aggression, and slop supply gradually", () => {
   const easy = createSinglePlayerState("easy", NOW, 10);
   const medium = createSinglePlayerState("medium", NOW, 10);
   const hard = createSinglePlayerState("hard", NOW, 10);
 
-  assert.deepEqual([easy.bots.length, medium.bots.length, hard.bots.length], [1, 2, 3]);
-  assert.deepEqual([easy.bots[0].health, medium.bots[0].health, hard.bots[0].health], [60, 80, 100]);
-  assert.ok(SINGLE_PLAYER_DIFFICULTY.easy.botThinkMs > SINGLE_PLAYER_DIFFICULTY.hard.botThinkMs);
-  assert.ok(SINGLE_PLAYER_DIFFICULTY.easy.botDamage < SINGLE_PLAYER_DIFFICULTY.hard.botDamage);
-  assert.deepEqual([easy.slop.length, medium.slop.length, hard.slop.length], [18, 15, 11]);
+  assert.deepEqual([easy.bots.length, medium.bots.length, hard.bots.length], [2, 3, 4]);
+  assert.deepEqual([easy.bots[0].health, medium.bots[0].health, hard.bots[0].health], [68, 82, 96]);
+  assert.deepEqual(
+    [
+      SINGLE_PLAYER_DIFFICULTY.easy.botDamage,
+      SINGLE_PLAYER_DIFFICULTY.medium.botDamage,
+      SINGLE_PLAYER_DIFFICULTY.hard.botDamage,
+    ],
+    [7, 9, 11],
+  );
+  assert.deepEqual(
+    [
+      SINGLE_PLAYER_DIFFICULTY.easy.botThinkMs,
+      SINGLE_PLAYER_DIFFICULTY.medium.botThinkMs,
+      SINGLE_PLAYER_DIFFICULTY.hard.botThinkMs,
+    ],
+    [1_250, 1_100, 900],
+  );
+  assert.deepEqual([easy.slop.length, medium.slop.length, hard.slop.length], [17, 15, 13]);
   assert.deepEqual(parseSinglePlayerState(JSON.parse(JSON.stringify(hard))), hard);
+});
+
+test("legacy easy runs remain loadable after the rebalance", () => {
+  const legacy = createSinglePlayerState("easy", NOW, 11);
+  legacy.bots.splice(1);
+  legacy.slop.push({
+    id: "legacy-extra-slop",
+    kind: "premium_tokens",
+    x: 480,
+    y: 288,
+    expiresAtMs: NOW + 10_000,
+  });
+
+  assert.deepEqual(parseSinglePlayerState(JSON.parse(JSON.stringify(legacy))), legacy);
 });
 
 test("CPU movement retains partial think time between syncs", () => {
@@ -97,21 +126,60 @@ test("context overflow blocks four points of CPU attack damage", () => {
 
   const result = advanceSinglePlayerState(state, NOW + SINGLE_PLAYER_DIFFICULTY.easy.botThinkMs);
   const attack = result.events.find(event => event.type === "bot_attack");
-  assert.equal(attack?.type === "bot_attack" && attack.damage, 1);
-  assert.equal(result.state.player.health, 99);
-  assert.equal(result.state.playerDamageTaken, 1);
+  const expectedDamage = SINGLE_PLAYER_DIFFICULTY.easy.botDamage - 4;
+  assert.equal(attack?.type === "bot_attack" && attack.damage, expectedDamage);
+  assert.equal(result.state.player.health, 100 - expectedDamage);
+  assert.equal(result.state.playerDamageTaken, expectedDamage);
 });
 
-test("defeating every CPU hog wins the run and awards knockout score", () => {
+test("CPU hogs fight each other while a hunter pressures the player", () => {
+  const state = createSinglePlayerState("easy", NOW, 31);
+  for (const combatant of [state.player, ...state.bots]) {
+    combatant.x = 480;
+    combatant.y = 288;
+  }
+
+  const result = advanceSinglePlayerState(state, NOW + SINGLE_PLAYER_DIFFICULTY.easy.botThinkMs);
+  assert.ok(result.events.some(event => event.type === "bot_attack"));
+  assert.ok(result.events.some(event => event.type === "bot_battle"));
+  assert.ok(result.state.player.health < 100);
+  assert.ok(result.state.bots.some(bot => bot.health < SINGLE_PLAYER_DIFFICULTY.easy.botHealth));
+});
+
+test("CPU hogs earn a knockout rush for defeating each other", () => {
+  const state = createSinglePlayerState("easy", NOW, 32);
+  for (const combatant of [state.player, ...state.bots]) {
+    combatant.x = 480;
+    combatant.y = 288;
+  }
+  for (const bot of state.bots) bot.health = 1;
+
+  const stepAt = NOW + SINGLE_PLAYER_DIFFICULTY.easy.botThinkMs;
+  const result = advanceSinglePlayerState(state, stepAt);
+  const survivor = result.state.bots.find(bot => bot.status === "alive");
+  assert.ok(result.events.some(event => event.type === "bot_battle" && event.targetDefeated));
+  assert.equal(survivor?.knockouts, 1);
+  assert.equal(survivor?.score, 250);
+  assert.equal(survivor?.knockoutRushExpiresAtMs, stepAt + KNOCKOUT_RUSH_DURATION_MS);
+});
+
+test("defeating every CPU hog wins the run and awards a knockout rush", () => {
   const state = createSinglePlayerState("easy", NOW, 33);
+  for (const bot of state.bots.slice(1)) {
+    bot.health = 0;
+    bot.status = "defeated";
+  }
   state.bots[0].x = state.player.x + 10;
   state.bots[0].y = state.player.y;
   state.bots[0].health = 1;
-  const result = applySinglePlayerAction(state, { type: "fart", targetId: "bot-1" }, NOW + 100);
+  const attackAt = NOW + 100;
+  const result = applySinglePlayerAction(state, { type: "fart", targetId: "bot-1" }, attackAt);
 
   assert.equal(singlePlayerRunStatus(result.state), "won");
   assert.equal(result.state.player.knockouts, 1);
   assert.equal(result.state.player.score, 250);
+  assert.equal(result.state.player.knockoutRushExpiresAtMs, attackAt + KNOCKOUT_RUSH_DURATION_MS);
+  assert.ok(result.events.some(event => event.type === "knockout_rush"));
   assert.ok(result.events.some(event => event.type === "victory"));
 });
 

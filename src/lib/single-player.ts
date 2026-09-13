@@ -80,6 +80,15 @@ export const SINGLE_PLAYER_DIFFICULTY: Record<SinglePlayerDifficulty, SinglePlay
   },
 };
 
+const LEGACY_SINGLE_PLAYER_LIMITS: Record<
+  SinglePlayerDifficulty,
+  { botCount: number; activeSlop: number }
+> = {
+  easy: { botCount: 1, activeSlop: 18 },
+  medium: { botCount: 2, activeSlop: 15 },
+  hard: { botCount: 3, activeSlop: 11 },
+};
+
 interface SinglePlayerCombatant {
   id: string;
   name: string;
@@ -380,7 +389,7 @@ export function parseSinglePlayerState(value: unknown): SinglePlayerState {
     return item as unknown as FarmSlop;
   });
   const definition = SINGLE_PLAYER_DIFFICULTY[value.difficulty];
-  const legacyBotCount = value.difficulty === "easy" ? 1 : value.difficulty === "medium" ? 2 : 3;
+  const legacyLimits = LEGACY_SINGLE_PLAYER_LIMITS[value.difficulty];
   if (
     !Number.isSafeInteger(value.rngState) || value.rngState <= 0 || value.rngState > 0xffff_ffff
     || !Number.isSafeInteger(value.startedAtMs) || value.startedAtMs < 0
@@ -389,9 +398,9 @@ export function parseSinglePlayerState(value: unknown): SinglePlayerState {
     || !Number.isSafeInteger(value.nextSlopId) || value.nextSlopId < 1
     || !Number.isFinite(value.playerDamageTaken) || value.playerDamageTaken < 0
     || player.id !== "solo-player"
-    || (bots.length !== definition.botCount && bots.length !== legacyBotCount)
+    || (bots.length !== definition.botCount && bots.length !== legacyLimits.botCount)
     || bots.some((bot, index) => bot.id !== `bot-${index + 1}`)
-    || slop.length > definition.activeSlop
+    || slop.length > Math.max(definition.activeSlop, legacyLimits.activeSlop)
   ) throw new Error("Invalid single-player state");
   return {
     version: SINGLE_PLAYER_STATE_VERSION,
@@ -458,7 +467,10 @@ function advanceBots(state: SinglePlayerState, nowMs: number): SinglePlayerEvent
     } else if (livingBots[0]) {
       hunterIds.add(livingBots[0].id);
     }
-    for (const bot of state.bots) {
+    const turnOrder = [...livingBots].sort(
+      (left, right) => Number(hunterIds.has(right.id)) - Number(hunterIds.has(left.id)),
+    );
+    for (const bot of turnOrder) {
       if (bot.status !== "alive" || state.player.status !== "alive") continue;
       expireEffect(bot, stepAt);
       expireEffect(state.player, stepAt);

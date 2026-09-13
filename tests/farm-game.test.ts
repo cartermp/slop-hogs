@@ -1,12 +1,16 @@
 import assert from "node:assert/strict";
 import { test } from "node:test";
 import {
+  ATTACK_COOLDOWN_MS,
   FARM_HEIGHT,
   FARM_WIDTH,
+  KNOCKOUT_RUSH_ATTACK_COOLDOWN_MS,
+  KNOCKOUT_RUSH_DAMAGE_BONUS,
   MAX_HEALTH,
   POPPING_MASS,
   SLOP_CATALOG,
   applySlop,
+  attackCooldownMs,
   decayPsychosis,
   hogDiameter,
   battleRange,
@@ -178,6 +182,26 @@ test("slop effects grant distinct battle bonuses", () => {
     battleRange("bite", { mass: base.mass, effect: "turbo" }, target),
     battleRange("bite", base, target) + 40,
   );
+});
+
+test("knockout rush temporarily boosts damage, speed, and attack rate", () => {
+  const base = { mass: 48, health: 100, status: "alive" as const, effect: null };
+  const target = { ...base };
+  assert.equal(
+    resolveBattleAttack({ ...base, knockoutRush: true }, target, "bite").damage,
+    resolveBattleAttack(base, target, "bite").damage + KNOCKOUT_RUSH_DAMAGE_BONUS,
+  );
+
+  const mover = { ...player(), lastMovedAtMs: NOW - 100 };
+  const normalMove = movePlayer(mover, { type: "move", dx: 1, dy: 0 }, NOW);
+  const rushMove = movePlayer(
+    { ...mover, knockoutRushExpiresAtMs: NOW + 1_000 },
+    { type: "move", dx: 1, dy: 0 },
+    NOW,
+  );
+  assert.ok(rushMove.x > normalMove.x);
+  assert.equal(attackCooldownMs(NOW + 1_000, NOW), KNOCKOUT_RUSH_ATTACK_COOLDOWN_MS);
+  assert.equal(attackCooldownMs(NOW, NOW), ATTACK_COOLDOWN_MS);
 });
 
 test("battle attacks can defeat a target or pop the attacker", () => {
