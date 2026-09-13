@@ -228,8 +228,13 @@ async function startRun(
   difficulty: SinglePlayerDifficulty,
   nowMs: number,
 ): Promise<SinglePlayerResult> {
+  const savedBeforeLock = await readState(client, ownerDid, true);
   await ensureAchievementProgress(client, ownerDid);
   const previous = await readAchievementProgress(client, ownerDid, true);
+  const saved = savedBeforeLock ?? await readState(client, ownerDid, true);
+  if (saved && singlePlayerRunStatus(saved) === "playing") {
+    throw new Error("Resume or finish the current run first");
+  }
   const progress = { ...previous, gamesStarted: previous.gamesStarted + 1 };
   const state = createSinglePlayerState(difficulty, nowMs, randomInt(1, 0x1_0000_0000));
   await saveState(client, ownerDid, state);

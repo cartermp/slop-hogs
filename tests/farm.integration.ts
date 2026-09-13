@@ -252,6 +252,14 @@ test("single-player runs and achievements persist separately", async () => {
     assert.ok(started.snapshot.singlePlayer.achievements.unlocks.some(
       unlock => unlock.id === "solo-table-for-one",
     ));
+    await assert.rejects(
+      actOnSinglePlayer(pool, did, { type: "start", difficulty: "hard" }, now + 1),
+      /Resume or finish the current run first/,
+    );
+    assert.equal(
+      (await syncSinglePlayer(pool, did, now + 2)).snapshot.singlePlayer.difficulty,
+      "easy",
+    );
 
     const stored = (await pool.query<{ state: Record<string, unknown> }>(
       "SELECT state FROM single_player_games WHERE owner_did=$1",

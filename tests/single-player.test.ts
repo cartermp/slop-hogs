@@ -61,6 +61,47 @@ test("CPU movement retains partial think time between syncs", () => {
   assert.ok(moved.bots[0].x < originalX);
 });
 
+test("single-player state accepts positions clamped to the hog's actual radius", () => {
+  const state = createSinglePlayerState("easy", NOW, 23);
+  state.player.x = 15;
+  state.player.y = 15;
+
+  assert.deepEqual(parseSinglePlayerState(JSON.parse(JSON.stringify(state))), state);
+  state.player.x = 14.99;
+  assert.throws(() => parseSinglePlayerState(state), /Invalid single-player state/);
+});
+
+test("gaining mass at the boundary keeps persisted coordinates valid", () => {
+  const state = createSinglePlayerState("easy", NOW, 25);
+  state.player.x = 15;
+  state.player.y = 15;
+  state.slop = [{
+    id: "boundary-slop",
+    kind: "context_overflow",
+    x: 15,
+    y: 15,
+    expiresAtMs: NOW + 10_000,
+  }];
+
+  const result = applySinglePlayerAction(state, { type: "move", dx: -1, dy: 0 }, NOW + 240);
+  assert.ok(result.state.player.x > 15);
+  assert.doesNotThrow(() => parseSinglePlayerState(JSON.parse(JSON.stringify(result.state))));
+});
+
+test("context overflow blocks four points of CPU attack damage", () => {
+  const state = createSinglePlayerState("easy", NOW, 24);
+  state.player.effect = "glitchy";
+  state.player.effectExpiresAtMs = NOW + 10_000;
+  state.bots[0].x = state.player.x + 10;
+  state.bots[0].y = state.player.y;
+
+  const result = advanceSinglePlayerState(state, NOW + SINGLE_PLAYER_DIFFICULTY.easy.botThinkMs);
+  const attack = result.events.find(event => event.type === "bot_attack");
+  assert.equal(attack?.type === "bot_attack" && attack.damage, 1);
+  assert.equal(result.state.player.health, 99);
+  assert.equal(result.state.playerDamageTaken, 1);
+});
+
 test("defeating every CPU hog wins the run and awards knockout score", () => {
   const state = createSinglePlayerState("easy", NOW, 33);
   state.bots[0].x = state.player.x + 10;

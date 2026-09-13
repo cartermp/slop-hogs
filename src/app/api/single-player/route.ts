@@ -103,6 +103,7 @@ export async function POST(request: Request) {
     const status = error instanceof RequestBodyTooLargeError ? 413
       : message === "Unauthorized" ? 401
       : message === "Forbidden" ? 403
+        : message === "Resume or finish the current run first" ? 409
         : error instanceof ReadOnlyError ? 503
         : badAction
           || message === "Attack is cooling down"

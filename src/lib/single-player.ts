@@ -8,6 +8,7 @@ import {
   applySlop,
   battleRange,
   decayPsychosis,
+  hogDiameter,
   movePlayer,
   parseFarmAction,
   resolveBattleAttack,
@@ -309,14 +310,17 @@ function parseCombatant(value: unknown): SinglePlayerCombatant {
     "lastMovedAtMs", "psychosisMovementMs", "updatedAtMs",
   ] as const;
   const invalidNumber = numericKeys.some(key => typeof value[key] !== "number" || !Number.isFinite(value[key]));
+  const radius = typeof value.mass === "number" && Number.isFinite(value.mass)
+    ? hogDiameter(value.mass) / 2
+    : Number.NaN;
   if (
     typeof value.id !== "string"
     || typeof value.name !== "string"
     || (value.facing !== "left" && value.facing !== "right")
     || !validStatus(value.status)
     || invalidNumber
-    || (value.x as number) < 24 || (value.x as number) > FARM_WIDTH - 24
-    || (value.y as number) < 24 || (value.y as number) > FARM_HEIGHT - 24
+    || (value.x as number) < radius || (value.x as number) > FARM_WIDTH - radius
+    || (value.y as number) < radius || (value.y as number) > FARM_HEIGHT - radius
     || (value.mass as number) < STARTING_MASS || (value.mass as number) > 100
     || (value.health as number) < 0 || (value.health as number) > MAX_HEALTH
     || (value.score as number) < 0 || (value.slopEaten as number) < 0 || (value.knockouts as number) < 0
@@ -403,6 +407,12 @@ function expireEffect(combatant: SinglePlayerCombatant, nowMs: number): void {
   }
 }
 
+function clampCombatantPosition(combatant: SinglePlayerCombatant): void {
+  const radius = hogDiameter(combatant.mass) / 2;
+  combatant.x = Math.max(radius, Math.min(FARM_WIDTH - radius, combatant.x));
+  combatant.y = Math.max(radius, Math.min(FARM_HEIGHT - radius, combatant.y));
+}
+
 function advanceBots(state: SinglePlayerState, nowMs: number): SinglePlayerEvent[] {
   const events: SinglePlayerEvent[] = [];
   if (singlePlayerRunStatus(state) !== "playing") return events;
@@ -429,7 +439,9 @@ function advanceBots(state: SinglePlayerState, nowMs: number): SinglePlayerEvent
       }
       const distance = Math.hypot(state.player.x - bot.x, state.player.y - bot.y);
       if (distance <= battleRange("bite", bot, state.player)) {
-        const health = Math.max(0, state.player.health - definition.botDamage);
+        const blockedDamage = state.player.effect === "glitchy" ? 4 : 0;
+        const botDamage = Math.max(1, definition.botDamage - blockedDamage);
+        const health = Math.max(0, state.player.health - botDamage);
         const damage = state.player.health - health;
         const playerDefeated = health === 0;
         state.player.health = health;
@@ -515,6 +527,7 @@ function applyPlayerMovement(
     lastMovedAtMs: nowMs,
     updatedAtMs: nowMs,
   });
+  clampCombatantPosition(player);
   return events;
 }
 
@@ -561,6 +574,7 @@ function applyPlayerAttack(
     psychosisMovementMs: 0,
     updatedAtMs: nowMs,
   });
+  clampCombatantPosition(player);
   Object.assign(target, {
     mass: battle.target.mass,
     health: battle.target.health,

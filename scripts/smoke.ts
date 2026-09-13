@@ -45,7 +45,7 @@ try {
   const html = await response.text();
   assert.match(html, /Slop Hogs/);
   assert.match(html, /SLOP SYSTEMS PRESENTS/);
-  assert.match(html, /A BATTLE ROYALE BETWEEN HOGS/);
+  assert.match(html, /HOG BATTLES, SHARED OR SOLO/);
   assert.match(html, /Bite\. Fart\. Eat slop\. Be the last hog standing\./);
   assert.match(html, /CHOMP!/);
   assert.match(html, /PFFT!/);
@@ -64,6 +64,11 @@ try {
   const farm = await fetch(`http://127.0.0.1:${port}/api/farm`, { signal: AbortSignal.timeout(5_000) });
   assert.equal(farm.status, 401);
   assert.deepEqual(await farm.json(), { error: "Sign in to enter the farm" });
+  const singlePlayer = await fetch(`http://127.0.0.1:${port}/api/single-player`, {
+    signal: AbortSignal.timeout(5_000),
+  });
+  assert.equal(singlePlayer.status, 401);
+  assert.deepEqual(await singlePlayer.json(), { error: "Sign in to enter the solo arena" });
   const metadataResponse = await fetch(`http://127.0.0.1:${port}/oauth/client-metadata.json`, {
     signal: AbortSignal.timeout(5_000),
   });
@@ -83,7 +88,7 @@ try {
   assert.equal(gallery.status, 404, "The development art gallery must stay out of production");
   const owner = await fetch(`http://127.0.0.1:${port}/owner`, { signal: AbortSignal.timeout(5_000) });
   assert.equal(owner.status, 404, "The owner page must reject anonymous requests");
-  console.log("Production game shell, farm auth, health, OAuth metadata and anonymous owner denial passed.");
+  console.log("Production game shell, farm and solo auth, health, OAuth metadata and anonymous owner denial passed.");
 } catch (error) {
   console.error(output);
   throw error;

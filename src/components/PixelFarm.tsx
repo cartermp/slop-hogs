@@ -539,6 +539,31 @@ export function PixelFarm({ canShareToBluesky }: { canShareToBluesky: boolean })
     setError(null);
     setNotice(null);
     try {
+      const existingResponse = await fetch("/api/single-player", {
+        headers: { accept: "application/json" },
+        cache: "no-store",
+      });
+      const existingPayload: unknown = await existingResponse.json();
+      if (existingResponse.ok) {
+        if (!isFarmResult(existingPayload) || !("singlePlayer" in existingPayload.snapshot)) {
+          throw new Error("The solo arena returned an invalid response");
+        }
+        if (existingPayload.snapshot.singlePlayer.status === "playing") {
+          latestServerTime.current = 0;
+          acceptResult(existingPayload, true);
+          setNotice(`Resumed existing ${existingPayload.snapshot.singlePlayer.difficulty.toUpperCase()} solo run.`);
+          setTargetId(null);
+          setMode("single");
+          return;
+        }
+      } else {
+        const message = existingPayload && typeof existingPayload === "object"
+          && typeof (existingPayload as Record<string, unknown>).error === "string"
+          ? (existingPayload as { error: string }).error
+          : "The solo arena failed to load";
+        if (existingResponse.status !== 404) throw new Error(message);
+      }
+
       const response = await fetch("/api/single-player", {
         method: "POST",
         headers: { "Content-Type": "application/json", accept: "application/json" },
