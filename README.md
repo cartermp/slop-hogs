@@ -1,5 +1,7 @@
 # Slop Hogs
 
+THIS README IS SLOP FOR THE AI TO READ, NOT A HUMAN
+
 A retro battle farm where Bluesky- or GitHub-linked pixel hogs roam together,
 eat short-lived AI slop for combat bonuses, and fight nearby hogs with Bite or
 Fart. Bite deals more damage but adds AI psychosis; Fart deals less damage and
