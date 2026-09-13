@@ -4,7 +4,7 @@ import "./farm.css";
 
 export const metadata: Metadata = {
   title: "Slop Hogs",
-  description: "A retro multiplayer battle farm where AI-powered hogs Bite, Fart, and risk psychosis.",
+  description: "A retro hog battle farm with multiplayer and difficulty-based single-player arenas.",
   robots: { index: false, follow: false },
 };
 

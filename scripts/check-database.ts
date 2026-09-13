@@ -22,6 +22,10 @@ try {
   await pool.query("SELECT id, field_id FROM farm_slop LIMIT 0");
   await pool.query("SELECT id, last_joined_at FROM farm_fields LIMIT 0");
   await pool.query("SELECT knockouts FROM farm_achievement_progress LIMIT 0");
+  await pool.query("SELECT difficulty, state FROM single_player_games LIMIT 0");
+  await pool.query(
+    "SELECT games_started, wins, easy_wins, medium_wins, hard_wins, total_knockouts, best_run_score, flawless_wins FROM single_player_achievement_progress LIMIT 0",
+  );
   const policy = loadCostPolicy();
   await expirePostPreviews(pool);
   const status = await transaction(pool, client => refreshOperationalStatus(client, {

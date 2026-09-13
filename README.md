@@ -1,20 +1,25 @@
 # Slop Hogs
 
-A retro multiplayer battle farm where Bluesky- or GitHub-linked pixel hogs roam together,
+A retro battle farm where Bluesky- or GitHub-linked pixel hogs roam together,
 eat short-lived AI slop for combat bonuses, and fight nearby hogs with Bite or
 Fart. Bite deals more damage but adds AI psychosis; Fart deals less damage and
 releases psychosis, and can be used even when no opponent is in range. Movement
 uses WASD, arrow keys, or the on-screen directional pad. Knockouts unlock a
 dedicated ladder of persistent battle achievements.
+Signed-in players can choose the shared multiplayer farm or a persistent
+single-player arena. Solo runs offer Easy, Medium, and Hard CPU opponents with
+different counts, health, aggression, damage, and slop supply, plus 12
+single-player-only achievements.
 One hundred and five persistent achievements reward lifetime consumption, score,
 movement, high-psychosis streaks, specialist diets, and spectacular failure.
 Unlocked badges open a prefilled Bluesky post without granting the game
 permission to post on the player's behalf.
 
-The farm is server-authoritative and persisted in PostgreSQL. Player movement,
+Both modes are server-authoritative and persisted in PostgreSQL. Player movement,
 pickup claims, timed slop expiration, effects, battle damage, knockouts,
 popping, redeployment, achievement progress, and unlocks are synchronized
-through `/api/farm`; verified Bluesky and GitHub logins form the identity boundary.
+through the mode-specific farm APIs; verified Bluesky and GitHub logins form
+the identity boundary.
 
 ## Run locally
 
@@ -34,7 +39,8 @@ configuration.
 
 In development, open http://localhost:3000/gallery to compare the mutation-composed six-meal AI image, generated post, chatbot screenshot, human post, and shitpost builds. The gallery returns a normal not-found page in production.
 
-The shell and gallery still run without auth configuration. To exercise Bluesky OAuth, configure PostgreSQL as described in [database development](docs/database.md), run migrations, and set `APP_ORIGIN`, `OAUTH_PRIVATE_KEY`, `OAUTH_ENCRYPTION_KEY`, and `SLOP_HOGS_OWNER_DIDS`. Generate the two secrets with:
+The shell and gallery still run without auth configuration. Multiplayer and
+single-player both require sign-in. To exercise Bluesky OAuth, configure PostgreSQL as described in [database development](docs/database.md), run migrations, and set `APP_ORIGIN`, `OAUTH_PRIVATE_KEY`, `OAUTH_ENCRYPTION_KEY`, and `SLOP_HOGS_OWNER_DIDS`. Generate the two secrets with:
 
 ```sh
 openssl genpkey -algorithm EC -pkeyopt ec_paramgen_curve:P-256

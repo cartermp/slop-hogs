@@ -92,6 +92,110 @@
   animation: online-pulse 1.4s steps(2) infinite;
 }
 
+.solo-dot {
+  display: inline-block;
+  width: 9px;
+  height: 9px;
+  margin-right: 5px;
+  background: #ffe45c;
+  box-shadow: 0 0 10px #ffe45c;
+}
+
+.mode-shell { width: min(100% - 24px, 1040px); }
+.mode-header { margin-top: clamp(14px, 4vh, 42px); }
+.mode-console {
+  border: 5px solid #151019;
+  outline: 4px solid #e2b767;
+  padding: clamp(18px, 4vw, 34px);
+  background:
+    linear-gradient(90deg, rgb(200 232 90 / .035) 1px, transparent 1px),
+    linear-gradient(rgb(200 232 90 / .035) 1px, transparent 1px),
+    #251926;
+  background-size: 18px 18px;
+  box-shadow: 10px 12px 0 rgb(0 0 0 / .42);
+}
+.mode-console-heading {
+  max-width: 700px;
+  margin-bottom: 25px;
+}
+.mode-console-heading h2 {
+  margin: 0;
+  color: var(--hot-pink);
+  font: clamp(20px, 4vw, 34px)/1.25 var(--pixel);
+}
+.mode-console-heading > p:last-child,
+.mode-card > p:not(.pixel-kicker) {
+  color: #dbcbd3;
+  font: 18px/1.3 var(--terminal);
+}
+.mode-error {
+  border: 3px solid #ff5b8b;
+  padding: 10px 12px;
+  color: #ffacc4;
+  font: 16px/1.4 var(--terminal);
+}
+.mode-grid {
+  display: grid;
+  grid-template-columns: minmax(0, .85fr) minmax(0, 1.15fr);
+  gap: 16px;
+}
+.mode-card {
+  position: relative;
+  min-width: 0;
+  border: 4px solid #151019;
+  padding: 24px;
+  overflow: hidden;
+  background: #342333;
+  box-shadow: inset 0 6px 0 #ff4f87;
+}
+.single-mode-card { box-shadow: inset 0 6px 0 #c8e85a; }
+.mode-number {
+  position: absolute;
+  right: 12px;
+  top: 8px;
+  color: rgb(255 241 197 / .12);
+  font: 48px/1 var(--pixel);
+}
+.mode-card h3 {
+  position: relative;
+  margin: 0;
+  color: #ffe8a4;
+  font: clamp(17px, 3vw, 25px)/1.3 var(--pixel);
+}
+.mode-card > p:not(.pixel-kicker) { min-height: 70px; }
+.mode-card > button,
+.difficulty-button {
+  border: 3px solid #151019;
+  padding: 13px 15px;
+  background: #ff5b8b;
+  color: #241623;
+  font: 9px/1.4 var(--pixel);
+  box-shadow: 4px 4px 0 #111;
+  cursor: pointer;
+}
+.mode-card button:disabled { cursor: wait; filter: grayscale(.7); opacity: .65; }
+.difficulty-grid {
+  display: grid;
+  grid-template-columns: repeat(3, minmax(0, 1fr));
+  gap: 8px;
+}
+.difficulty-button {
+  min-width: 0;
+  padding: 11px 8px;
+  background: #c8e85a;
+  text-align: left;
+}
+.difficulty-button strong,
+.difficulty-button small { display: block; }
+.difficulty-button small {
+  margin-top: 7px;
+  font: 14px/1.05 var(--terminal);
+}
+.difficulty-medium { background: #ffd45d; }
+.difficulty-hard { background: #ff668f; }
+.mode-card button:hover:not(:disabled),
+.mode-card button:focus-visible:not(:disabled) { transform: translate(-1px, -1px); box-shadow: 6px 6px 0 #111; }
+
 .game-console {
   border: 5px solid #151019;
   outline: 4px solid #e2b767;
@@ -652,6 +756,18 @@
   box-shadow: 5px 5px 0 #ff4f87;
   cursor: pointer;
 }
+.pop-overlay .overlay-secondary-button {
+  margin-top: 12px;
+  background: #342333;
+  color: #ffd5e1;
+  box-shadow: 5px 5px 0 #161016;
+}
+.victory-overlay::before { border-color: #bfe64d; }
+.victory-overlay p { color: #bfe64d; }
+.victory-overlay h2 {
+  color: #ffe66d;
+  text-shadow: 5px 5px 0 #41612e;
+}
 
 .console-footer {
   display: grid;
@@ -810,6 +926,13 @@
   background: #251926;
   box-shadow: 9px 10px 0 rgb(0 0 0 / .32);
 }
+.solo-achievement-cabinet {
+  outline-color: #8eaa42;
+  box-shadow: 9px 10px 0 rgb(0 0 0 / .32), inset 0 5px 0 rgb(200 232 90 / .08);
+}
+.solo-achievement-cabinet .achievement-heading { align-items: end; }
+.solo-achievement-cabinet .achievement-heading .pixel-kicker { margin-bottom: 5px; }
+.solo-achievement-grid { max-height: none; }
 
 .achievement-heading {
   display: flex;
@@ -1119,6 +1242,8 @@
 }
 
 @media (max-width: 950px) {
+  .mode-grid { grid-template-columns: 1fr; }
+  .mode-card > p:not(.pixel-kicker) { min-height: 0; }
   .slop-legend { grid-template-columns: repeat(2, 1fr); }
   .hud { grid-template-columns: repeat(3, 1fr); }
   .health-meter,
@@ -1132,6 +1257,13 @@
   .game-header h1 { font-size: 37px; }
   .pixel-kicker { font-size: 7px; }
   .game-status { align-items: flex-end; flex-direction: column; gap: 2px; font-size: 15px; }
+  .game-status button { padding-block: 4px; font-size: 15px; }
+  .mode-header { align-items: start; margin-top: 8px; }
+  .mode-console { padding: 16px 12px; }
+  .mode-card { padding: 19px 15px; }
+  .difficulty-grid { grid-template-columns: 1fr; }
+  .difficulty-button { text-align: center; }
+  .difficulty-button small { font-size: 16px; }
   .hud small { font-size: 6px; }
   .hud strong { font-size: 18px; }
   .hud-stat, .mass-meter { padding: 8px; }
@@ -1147,7 +1279,8 @@
   .terminal-auth .handle-combobox { width: 100%; }
   .slop-legend { grid-template-columns: 1fr; }
   .slop-card-heading { min-height: 0; }
-  .achievement-heading { align-items: flex-start; flex-direction: column; }
+  .achievement-heading,
+  .solo-achievement-cabinet .achievement-heading { align-items: flex-start; flex-direction: column; }
   .achievement-heading > strong { font-size: 18px; }
   .achievement-grid { max-height: 620px; grid-template-columns: 1fr; }
   .achievement-card { min-height: 0; }

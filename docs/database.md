@@ -31,6 +31,9 @@ Farm achievement tests also verify that lifetime counters survive a restart,
 unlock rows are inserted in the same transaction as the triggering movement,
 and existing farm totals are enrolled once when the achievement catalog first
 loads.
+Single-player checks verify that difficulty changes CPU count, health, damage,
+movement cadence, and slop supply. Solo game state, run totals, difficulty wins,
+and separate unlock rows are committed together.
 
 This reconnect check is not a PostgreSQL crash/restore test. Use `backup:prepare` and `backup:verify` against a distinct Railway-restored database as documented in the deployment runbook.
 
@@ -41,6 +44,9 @@ per-slop-kind and movement history begin at deployment because migration 009
 did not retain those historical events. Migration 015 records whether each
 account identity was verified by Bluesky or GitHub; existing accounts are
 backfilled as Bluesky accounts.
+Migration 016 groups players into bounded shared fields. Migration 017 stores
+one isolated solo run per account plus its dedicated achievement progress and
+unlock history.
 
 Each application pool allows four connections, with finite connection, lock, query, and idle transaction timeouts. Reuse one pool per process when HTTP routes arrive. The transaction helper holds one client for BEGIN through COMMIT, as required by the [pg transaction API](https://node-postgres.com/features/transactions). `operational_status` stores the latest bounded database-size measurement and enforced growth state. `backup_restore_checks` records only the latest synthetic challenge and successful restore timestamp; it contains no player or provider secrets.
 

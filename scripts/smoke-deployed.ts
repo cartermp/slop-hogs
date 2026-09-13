@@ -12,7 +12,7 @@ for (const [path, status] of [["/api/health", 200], ["/", 200], ["/gallery", 404
   } else if (path === "/") {
     const html = await response.text();
     assert.match(html, /SLOP SYSTEMS PRESENTS/);
-    assert.match(html, /A BATTLE ROYALE BETWEEN HOGS/);
+    assert.match(html, /HOG BATTLES, SHARED OR SOLO/);
     assert.match(html, /Bite\. Fart\. Eat slop\. Be the last hog standing\./);
     assert.match(html, /CHOMP!/);
     assert.match(html, /PFFT!/);

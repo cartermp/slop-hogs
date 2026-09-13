@@ -3,6 +3,7 @@
 import { useCallback, useEffect, useMemo, useRef, useState } from "react";
 import { AchievementCabinet } from "@/components/AchievementCabinet";
 import { FeedbackLinks } from "@/components/FeedbackLinks";
+import { SinglePlayerAchievementCabinet } from "@/components/SinglePlayerAchievementCabinet";
 import { ACHIEVEMENT_BY_ID } from "@/lib/achievements";
 import {
   FARM_HEIGHT,
@@ -21,9 +22,22 @@ import {
   type FarmPlayer,
   type FarmSnapshot,
 } from "@/lib/farm-game";
+import { SINGLE_PLAYER_ACHIEVEMENT_BY_ID } from "@/lib/single-player-achievements";
+import {
+  SINGLE_PLAYER_DIFFICULTIES,
+  SINGLE_PLAYER_DIFFICULTY,
+  type SinglePlayerAction,
+  type SinglePlayerDifficulty,
+  type SinglePlayerEvent,
+  type SinglePlayerResult,
+  type SinglePlayerSnapshot,
+} from "@/lib/single-player";
 
 type Direction = "up" | "down" | "left" | "right";
 type BattleEffect = { id: number; move: BattleMove };
+type GameMode = "multiplayer" | "single";
+type PlaySnapshot = FarmSnapshot | SinglePlayerSnapshot;
+type PlayResult = FarmActionResult | SinglePlayerResult;
 
 const movementKeys: ReadonlyMap<string, Direction> = new Map([
   ["w", "up"],
@@ -36,7 +50,7 @@ const movementKeys: ReadonlyMap<string, Direction> = new Map([
   ["arrowright", "right"],
 ] as const);
 
-function isFarmResult(value: unknown): value is FarmActionResult {
+function isFarmResult(value: unknown): value is PlayResult {
   if (!value || typeof value !== "object") return false;
   const result = value as Record<string, unknown>;
   if (!result.snapshot || typeof result.snapshot !== "object" || !Array.isArray(result.events)) return false;
@@ -44,7 +58,7 @@ function isFarmResult(value: unknown): value is FarmActionResult {
   return typeof snapshot.serverNowMs === "number"
     && Array.isArray(snapshot.players)
     && Array.isArray(snapshot.slop)
-    && Boolean(snapshot.achievements);
+    && (Boolean(snapshot.achievements) || Boolean(snapshot.singlePlayer));
 }
 
 function PixelHog({
@@ -135,7 +149,7 @@ function PixelHog({
   );
 }
 
-function eventMessage(event: FarmEvent): string {
+function eventMessage(event: FarmEvent | SinglePlayerEvent): string {
   if (event.type === "slop_eaten") {
     return `${SLOP_CATALOG[event.kind].label}: +${event.massGained} mass / +${event.pointsGained} points`;
   }
@@ -156,14 +170,101 @@ function eventMessage(event: FarmEvent): string {
       ? `ACHIEVEMENT UNLOCKED: ${names[0]}`
       : `${names.length} ACHIEVEMENTS UNLOCKED: ${names.join(" / ")}`;
   }
+  if (event.type === "single_player_achievements_unlocked") {
+    const names = event.achievementIds
+      .map(id => SINGLE_PLAYER_ACHIEVEMENT_BY_ID.get(id)?.title)
+      .filter((title): title is string => Boolean(title));
+    return names.length === 1
+      ? `SOLO ACHIEVEMENT UNLOCKED: ${names[0]}`
+      : `${names.length} SOLO ACHIEVEMENTS UNLOCKED: ${names.join(" / ")}`;
+  }
+  if (event.type === "bot_attack") {
+    return `${event.botName} BIT YOU FOR ${event.damage}.${event.playerDefeated ? " YOU ARE BACON." : ` ${event.playerHealth} HP LEFT.`}`;
+  }
+  if (event.type === "victory") {
+    return `${event.difficulty.toUpperCase()} ARENA CLEARED. FINAL SCORE: ${event.score}.`;
+  }
   if (event.type === "restarted") return "Fresh hog deployed. Resume battle.";
   return "CRITICAL MASS REACHED";
 }
 
+function ModeSelect({
+  error,
+  startingDifficulty,
+  onMultiplayer,
+  onSinglePlayer,
+}: {
+  error: string | null;
+  startingDifficulty: SinglePlayerDifficulty | null;
+  onMultiplayer: () => void;
+  onSinglePlayer: (difficulty: SinglePlayerDifficulty) => void;
+}) {
+  return (
+    <main className="game-shell mode-shell">
+      <header className="game-header mode-header">
+        <div>
+          <p className="pixel-kicker">SIGNED IN // SELECT ARENA</p>
+          <h1>SLOP<br /><span>HOGS</span></h1>
+        </div>
+        <div className="game-status">
+          <form action="/oauth/logout" method="post">
+            <button type="submit">[ SIGN OUT ]</button>
+          </form>
+          <FeedbackLinks variant="game" />
+        </div>
+      </header>
+      <section className="mode-console" aria-labelledby="mode-title">
+        <div className="mode-console-heading">
+          <p className="pixel-kicker">BOOT SEQUENCE COMPLETE</p>
+          <h2 id="mode-title">CHOOSE YOUR TROUGH</h2>
+          <p>Battle real hogs in the shared farm, or take on CPU swine at your own pace.</p>
+        </div>
+        {error && <p className="mode-error" role="alert">ERROR: {error}</p>}
+        <div className="mode-grid">
+          <article className="mode-card multiplayer-mode-card">
+            <span className="mode-number">8P</span>
+            <p className="pixel-kicker">THE ORIGINAL MESS</p>
+            <h3>MULTIPLAYER</h3>
+            <p>Join a live field with up to eight signed-in hogs. Shared slop. Real grudges.</p>
+            <button type="button" onClick={onMultiplayer} disabled={startingDifficulty !== null}>
+              [ ENTER SHARED FARM ]
+            </button>
+          </article>
+          <article className="mode-card single-mode-card">
+            <span className="mode-number">1P</span>
+            <p className="pixel-kicker">PRIVATE PANDEMONIUM</p>
+            <h3>SINGLE PLAYER</h3>
+            <p>Fight CPU hogs and unlock a separate set of persistent solo achievements.</p>
+            <div className="difficulty-grid" aria-label="Single-player difficulty">
+              {SINGLE_PLAYER_DIFFICULTIES.map(difficulty => {
+                const definition = SINGLE_PLAYER_DIFFICULTY[difficulty];
+                return (
+                  <button
+                    type="button"
+                    className={`difficulty-button difficulty-${difficulty}`}
+                    onClick={() => onSinglePlayer(difficulty)}
+                    disabled={startingDifficulty !== null}
+                    key={difficulty}
+                  >
+                    <strong>{startingDifficulty === difficulty ? "LOADING..." : definition.label}</strong>
+                    <small>{definition.description}</small>
+                  </button>
+                );
+              })}
+            </div>
+          </article>
+        </div>
+      </section>
+    </main>
+  );
+}
+
 export function PixelFarm({ canShareToBluesky }: { canShareToBluesky: boolean }) {
-  const [snapshot, setSnapshot] = useState<FarmSnapshot | null>(null);
+  const [mode, setMode] = useState<GameMode | null>(null);
+  const [snapshot, setSnapshot] = useState<PlaySnapshot | null>(null);
   const [notice, setNotice] = useState<string | null>(null);
   const [error, setError] = useState<string | null>(null);
+  const [startingDifficulty, setStartingDifficulty] = useState<SinglePlayerDifficulty | null>(null);
   const [targetId, setTargetId] = useState<string | null>(null);
   const [battleEffect, setBattleEffect] = useState<BattleEffect | null>(null);
   const keys = useRef(new Set<Direction>());
@@ -190,7 +291,7 @@ export function PixelFarm({ canShareToBluesky }: { canShareToBluesky: boolean })
     }
   }, []);
 
-  const acceptResult = useCallback((result: FarmActionResult, showEvents: boolean) => {
+  const acceptResult = useCallback((result: PlayResult, showEvents: boolean) => {
     if (result.snapshot.serverNowMs >= latestServerTime.current) {
       latestServerTime.current = result.snapshot.serverNowMs;
       setSnapshot(result.snapshot);
@@ -204,8 +305,13 @@ export function PixelFarm({ canShareToBluesky }: { canShareToBluesky: boolean })
     setError(null);
   }, []);
 
-  const requestFarm = useCallback(async (action?: FarmAction, signal?: AbortSignal) => {
-    const response = await fetch("/api/farm", action ? {
+  const requestFarm = useCallback(async (
+    selectedMode: GameMode,
+    action?: FarmAction | SinglePlayerAction,
+    signal?: AbortSignal,
+  ) => {
+    const endpoint = selectedMode === "single" ? "/api/single-player" : "/api/farm";
+    const response = await fetch(endpoint, action ? {
       method: "POST",
       headers: { "Content-Type": "application/json", accept: "application/json" },
       body: JSON.stringify(action),
@@ -222,7 +328,7 @@ export function PixelFarm({ canShareToBluesky }: { canShareToBluesky: boolean })
         : "Lost contact with the farm";
       throw new Error(message);
     }
-    acceptResult(payload, Boolean(action));
+    acceptResult(payload, Boolean(action) || selectedMode === "single");
   }, [acceptResult]);
 
   const sendMovement = useCallback(() => {
@@ -234,13 +340,15 @@ export function PixelFarm({ canShareToBluesky }: { canShareToBluesky: boolean })
     const dx = (keys.current.has("right") ? 1 : 0) - (keys.current.has("left") ? 1 : 0);
     const dy = (keys.current.has("down") ? 1 : 0) - (keys.current.has("up") ? 1 : 0);
     if (dx === 0 && dy === 0) return;
+    if (!mode) return;
     requestInFlight.current = true;
-    requestFarm({ type: "move", dx: dx as -1 | 0 | 1, dy: dy as -1 | 0 | 1 })
+    requestFarm(mode, { type: "move", dx: dx as -1 | 0 | 1, dy: dy as -1 | 0 | 1 })
       .catch(failure => setError(failure instanceof Error ? failure.message : "Movement failed"))
       .finally(() => { requestInFlight.current = false; });
-  }, [requestFarm]);
+  }, [mode, requestFarm]);
 
   useEffect(() => {
+    if (!mode) return;
     let active = true;
     let syncing = false;
     let poll: number | null = null;
@@ -255,7 +363,7 @@ export function PixelFarm({ canShareToBluesky }: { canShareToBluesky: boolean })
       syncing = true;
       controller = new AbortController();
       try {
-        await requestFarm(undefined, controller.signal);
+        await requestFarm(mode, undefined, controller.signal);
       } catch (failure) {
         if (active && !(failure instanceof DOMException && failure.name === "AbortError")) {
           setError(failure instanceof Error ? failure.message : "The farm failed to sync");
@@ -283,7 +391,7 @@ export function PixelFarm({ canShareToBluesky }: { canShareToBluesky: boolean })
       if (poll !== null) window.clearTimeout(poll);
       document.removeEventListener("visibilitychange", visibilityChanged);
     };
-  }, [requestFarm]);
+  }, [mode, requestFarm]);
 
   useEffect(() => {
     const changeKey = (event: KeyboardEvent, pressed: boolean) => {
@@ -317,6 +425,8 @@ export function PixelFarm({ canShareToBluesky }: { canShareToBluesky: boolean })
   }, [sendMovement]);
 
   const ownHog = snapshot?.players.find(player => player.isYou) ?? null;
+  const singlePlayer = snapshot && "singlePlayer" in snapshot ? snapshot.singlePlayer : null;
+  const runIsActive = mode !== "single" || singlePlayer?.status === "playing";
   const opponents = useMemo(
     () => snapshot?.players.filter(player => !player.isYou && player.status === "alive") ?? [],
     [snapshot],
@@ -336,12 +446,14 @@ export function PixelFarm({ canShareToBluesky }: { canShareToBluesky: boolean })
     ownHog
     && selectedTarget
     && ownHog.status === "alive"
+    && runIsActive
     && targetDistance <= battleRange("bite", ownHog, selectedTarget),
   );
   const canFartHit = Boolean(
     ownHog
     && selectedTarget
     && ownHog.status === "alive"
+    && runIsActive
     && targetDistance <= battleRange("fart", ownHog, selectedTarget),
   );
 
@@ -360,7 +472,8 @@ export function PixelFarm({ canShareToBluesky }: { canShareToBluesky: boolean })
     requestInFlight.current = true;
     keys.current.clear();
     try {
-      await requestFarm({ type: "restart" });
+      if (!mode) return;
+      await requestFarm(mode, { type: "restart" });
     } catch (failure) {
       setError(failure instanceof Error ? failure.message : "Restart failed");
     } finally {
@@ -369,7 +482,7 @@ export function PixelFarm({ canShareToBluesky }: { canShareToBluesky: boolean })
   }
 
   const attack = useCallback(async (move: BattleMove) => {
-    if (requestInFlight.current || !ownHog || ownHog.status !== "alive") return;
+    if (requestInFlight.current || !ownHog || ownHog.status !== "alive" || !runIsActive) return;
     const target = selectedTarget;
     let action: FarmAction;
     if (move === "bite") {
@@ -384,13 +497,14 @@ export function PixelFarm({ canShareToBluesky }: { canShareToBluesky: boolean })
     keys.current.clear();
     triggerBattleEffect(move);
     try {
-      await requestFarm(action);
+      if (!mode) return;
+      await requestFarm(mode, action);
     } catch (failure) {
       setError(failure instanceof Error ? failure.message : "Attack failed");
     } finally {
       requestInFlight.current = false;
     }
-  }, [canBite, canFartHit, ownHog, requestFarm, selectedTarget, triggerBattleEffect]);
+  }, [canBite, canFartHit, mode, ownHog, requestFarm, runIsActive, selectedTarget, triggerBattleEffect]);
 
   useEffect(() => {
     const useBattleHotkey = (event: KeyboardEvent) => {
@@ -409,15 +523,113 @@ export function PixelFarm({ canShareToBluesky }: { canShareToBluesky: boolean })
     return () => window.removeEventListener("keydown", useBattleHotkey);
   }, [attack]);
 
+  function enterMultiplayer() {
+    setError(null);
+    setNotice("Connecting to the shared farm...");
+    setSnapshot(null);
+    setTargetId(null);
+    latestServerTime.current = 0;
+    setMode("multiplayer");
+  }
+
+  async function enterSinglePlayer(difficulty: SinglePlayerDifficulty) {
+    if (startingDifficulty !== null || requestInFlight.current) return;
+    requestInFlight.current = true;
+    setStartingDifficulty(difficulty);
+    setError(null);
+    setNotice(null);
+    try {
+      const existingResponse = await fetch("/api/single-player", {
+        headers: { accept: "application/json" },
+        cache: "no-store",
+      });
+      const existingPayload: unknown = await existingResponse.json();
+      if (existingResponse.ok) {
+        if (!isFarmResult(existingPayload) || !("singlePlayer" in existingPayload.snapshot)) {
+          throw new Error("The solo arena returned an invalid response");
+        }
+        if (existingPayload.snapshot.singlePlayer.status === "playing") {
+          latestServerTime.current = 0;
+          acceptResult(existingPayload, true);
+          setNotice(`Resumed existing ${existingPayload.snapshot.singlePlayer.difficulty.toUpperCase()} solo run.`);
+          setTargetId(null);
+          setMode("single");
+          return;
+        }
+      } else {
+        const message = existingPayload && typeof existingPayload === "object"
+          && typeof (existingPayload as Record<string, unknown>).error === "string"
+          ? (existingPayload as { error: string }).error
+          : "The solo arena failed to load";
+        if (existingResponse.status !== 404) throw new Error(message);
+      }
+
+      const response = await fetch("/api/single-player", {
+        method: "POST",
+        headers: { "Content-Type": "application/json", accept: "application/json" },
+        body: JSON.stringify({ type: "start", difficulty } satisfies SinglePlayerAction),
+      });
+      const payload: unknown = await response.json();
+      if (!response.ok || !isFarmResult(payload) || !("singlePlayer" in payload.snapshot)) {
+        const message = payload && typeof payload === "object" && typeof (payload as Record<string, unknown>).error === "string"
+          ? (payload as { error: string }).error
+          : "The solo arena failed to start";
+        throw new Error(message);
+      }
+      latestServerTime.current = 0;
+      acceptResult(payload, true);
+      setTargetId(null);
+      setMode("single");
+    } catch (failure) {
+      setError(failure instanceof Error ? failure.message : "The solo arena failed to start");
+    } finally {
+      requestInFlight.current = false;
+      setStartingDifficulty(null);
+    }
+  }
+
+  function chooseAnotherMode() {
+    if (requestInFlight.current) return;
+    keys.current.clear();
+    latestServerTime.current = 0;
+    setMode(null);
+    setSnapshot(null);
+    setTargetId(null);
+    setBattleEffect(null);
+    setNotice(null);
+    setError(null);
+  }
+
+  if (!mode) {
+    return (
+      <ModeSelect
+        error={error}
+        startingDifficulty={startingDifficulty}
+        onMultiplayer={enterMultiplayer}
+        onSinglePlayer={enterSinglePlayer}
+      />
+    );
+  }
+
   return (
     <main className="game-shell">
       <header className="game-header">
         <div>
-          <p className="pixel-kicker">ONLINE // BATTLE FARM 01</p>
+          <p className="pixel-kicker">
+            {mode === "single"
+              ? `SOLO ARENA // ${singlePlayer?.difficulty.toUpperCase() ?? "LOADING"}`
+              : "ONLINE // BATTLE FARM 01"}
+          </p>
           <h1>SLOP<br /><span>HOGS</span></h1>
         </div>
         <div className="game-status">
-          <span><i className="online-dot" /> {Math.max(1, snapshot?.players.length ?? 1)} HOGS ONLINE</span>
+          <span>
+            <i className={mode === "single" ? "solo-dot" : "online-dot"} />
+            {mode === "single"
+              ? `${singlePlayer?.botsRemaining ?? "-"} CPU HOGS LEFT`
+              : `${Math.max(1, snapshot?.players.length ?? 1)} HOGS ONLINE`}
+          </span>
+          <button type="button" className="mode-switch-button" onClick={chooseAnotherMode}>[ CHANGE MODE ]</button>
           <form action="/oauth/logout" method="post">
             <button type="submit">[ SIGN OUT ]</button>
           </form>
@@ -425,7 +637,7 @@ export function PixelFarm({ canShareToBluesky }: { canShareToBluesky: boolean })
         </div>
       </header>
 
-      <section className="game-console" aria-label="Slop Hogs multiplayer battle">
+      <section className="game-console" aria-label={mode === "single" ? "Slop Hogs single-player battle" : "Slop Hogs multiplayer battle"}>
         <div className="hud">
           <div className="hud-stat hud-hog">
             <small>HOG</small>
@@ -453,7 +665,7 @@ export function PixelFarm({ canShareToBluesky }: { canShareToBluesky: boolean })
             <div className="farm-path path-vertical" aria-hidden="true" />
             <div className="pixel-pond" aria-hidden="true"><i /><i /><i /></div>
             <div className="pigsty" aria-hidden="true"><b>PIGSTY.EXE</b><i /></div>
-            <div className="mud-pen" aria-hidden="true"><b>COMMUNAL PEN</b></div>
+            <div className="mud-pen" aria-hidden="true"><b>{mode === "single" ? "CPU PEN" : "COMMUNAL PEN"}</b></div>
             <div className="hay-bale hay-one" aria-hidden="true" />
             <div className="hay-bale hay-two" aria-hidden="true" />
             <div className="farm-fence fence-top" aria-hidden="true" />
@@ -495,7 +707,29 @@ export function PixelFarm({ canShareToBluesky }: { canShareToBluesky: boolean })
                   KNOCKOUTS: {ownHog.knockouts}
                 </div>
                 <button type="button" onClick={restart} disabled={requestInFlight.current}>
-                  [ DEPLOY FRESH HOG ]
+                  {mode === "single" ? "[ TRY SAME DIFFICULTY ]" : "[ DEPLOY FRESH HOG ]"}
+                </button>
+                {mode === "single" && (
+                  <button type="button" className="overlay-secondary-button" onClick={chooseAnotherMode}>
+                    [ CHANGE DIFFICULTY ]
+                  </button>
+                )}
+              </div>
+            )}
+            {ownHog && singlePlayer?.status === "won" && (
+              <div className="pop-overlay victory-overlay" role="dialog" aria-modal="true" aria-labelledby="victory-title">
+                <p>*** ARENA CLEARED ***</p>
+                <h2 id="victory-title">YOU ARE THE LAST<br />HOG STANDING</h2>
+                <div>
+                  DIFFICULTY: {singlePlayer.difficulty.toUpperCase()}<br />
+                  FINAL SCORE: {String(ownHog.score).padStart(6, "0")}<br />
+                  KNOCKOUTS: {ownHog.knockouts}
+                </div>
+                <button type="button" onClick={restart} disabled={requestInFlight.current}>
+                  [ PLAY AGAIN ]
+                </button>
+                <button type="button" className="overlay-secondary-button" onClick={chooseAnotherMode}>
+                  [ CHANGE DIFFICULTY ]
                 </button>
               </div>
             )}
@@ -589,11 +823,18 @@ export function PixelFarm({ canShareToBluesky }: { canShareToBluesky: boolean })
         ))}
       </section>
 
-      {snapshot && (
+      {snapshot && mode === "multiplayer" && "achievements" in snapshot && (
         <AchievementCabinet
           canShareToBluesky={canShareToBluesky}
           playerName={ownHog?.name ?? "UNKNOWN HOG"}
           state={snapshot.achievements}
+        />
+      )}
+      {singlePlayer && (
+        <SinglePlayerAchievementCabinet
+          canShareToBluesky={canShareToBluesky}
+          playerName={ownHog?.name ?? "UNKNOWN HOG"}
+          state={singlePlayer.achievements}
         />
       )}
     </main>
