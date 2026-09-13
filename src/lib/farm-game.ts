@@ -8,6 +8,10 @@ export const MAX_HEALTH = 100;
 export const ONLINE_WINDOW_MS = 20_000;
 export const PSYCHOSIS_DECAY_INTERVAL_MS = 2_000;
 export const ATTACK_COOLDOWN_MS = 900;
+export const KNOCKOUT_RUSH_ATTACK_COOLDOWN_MS = 700;
+export const KNOCKOUT_RUSH_DAMAGE_BONUS = 4;
+export const KNOCKOUT_RUSH_DURATION_MS = 7_000;
+export const KNOCKOUT_RUSH_SPEED_MULTIPLIER = 1.2;
 export const BITE_PSYCHOSIS = 7;
 export const FART_PSYCHOSIS_RELEASE = 10;
 
@@ -112,6 +116,7 @@ export interface FarmPlayer {
   status: FarmPlayerStatus;
   effect: HogEffect | null;
   effectExpiresAtMs: number | null;
+  knockoutRushExpiresAtMs?: number | null;
   updatedAtMs: number;
   isYou: boolean;
 }
@@ -149,6 +154,7 @@ export type FarmEvent =
     targetDefeated: boolean;
   }
   | { type: "psychosis_released"; amount: number }
+  | { type: "knockout_rush"; expiresAtMs: number }
   | { type: "popped" }
   | { type: "restarted" }
   | { type: "achievements_unlocked"; achievementIds: string[] };
@@ -166,6 +172,7 @@ export interface MovablePlayer {
   status: FarmPlayerStatus;
   effect: HogEffect | null;
   effectExpiresAtMs: number | null;
+  knockoutRushExpiresAtMs?: number | null;
   lastMovedAtMs: number;
 }
 
@@ -180,6 +187,7 @@ export interface BattleCombatant {
   health: number;
   status: FarmPlayerStatus;
   effect: HogEffect | null;
+  knockoutRush?: boolean;
 }
 
 export interface BattleResult {
@@ -256,6 +264,7 @@ export function resolveBattleAttack(
   if (attacker.effect === "collapsed" && move === "bite") damage += 7;
   if (attacker.effect === "recursive" && move === "fart") damage += 6;
   if (attacker.effect === "premium") damage += 3;
+  if (attacker.knockoutRush) damage += KNOCKOUT_RUSH_DAMAGE_BONUS;
   if (target.effect === "glitchy") damage -= 4;
   damage = Math.max(1, damage);
 
@@ -317,6 +326,11 @@ export function movePlayer<T extends MovablePlayer>(
     : activeEffect === "collapsed" ? 0.58
       : activeEffect === "glitchy" ? 0.78
         : 1;
+  const knockoutRushSpeed = player.knockoutRushExpiresAtMs !== null
+    && player.knockoutRushExpiresAtMs !== undefined
+    && player.knockoutRushExpiresAtMs > nowMs
+    ? KNOCKOUT_RUSH_SPEED_MULTIPLIER
+    : 1;
   const fatSpeed = Math.max(0.52, 1 - (player.mass - STARTING_MASS) / 150);
   const chaos = Math.max(0, (psychosisLevel(player.mass) - 0.5) * 2);
   const wobble = chaos * (
@@ -324,7 +338,7 @@ export function movePlayer<T extends MovablePlayer>(
     + Math.sin(nowMs / 31) * 0.4
   );
   const stutter = 1 - chaos * 0.3 * (0.5 + 0.5 * Math.sin(nowMs / 47 + player.y));
-  const distance = 0.095 * elapsedMs * effectSpeed * fatSpeed * stutter;
+  const distance = 0.095 * elapsedMs * effectSpeed * knockoutRushSpeed * fatSpeed * stutter;
   const magnitude = Math.hypot(action.dx, action.dy);
   const intendedAngle = Math.atan2(action.dy / magnitude, action.dx / magnitude);
   const dx = Math.cos(intendedAngle + wobble);
@@ -339,6 +353,12 @@ export function movePlayer<T extends MovablePlayer>(
     effectExpiresAtMs: activeEffect ? player.effectExpiresAtMs : null,
     lastMovedAtMs: nowMs,
   };
+}
+
+export function attackCooldownMs(knockoutRushExpiresAtMs: number | null, nowMs: number): number {
+  return knockoutRushExpiresAtMs !== null && knockoutRushExpiresAtMs > nowMs
+    ? KNOCKOUT_RUSH_ATTACK_COOLDOWN_MS
+    : ATTACK_COOLDOWN_MS;
 }
 
 export function touchingSlop(player: Pick<MovablePlayer, "x" | "y" | "mass">, slop: FarmSlop[]): FarmSlop | null {

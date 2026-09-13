@@ -73,8 +73,9 @@ function PixelHog({
   onTarget?: () => void;
 }) {
   const diameter = hogDiameter(player.mass);
-  const effectLabel = Object.values(SLOP_CATALOG)
-    .find(definition => definition.effect === player.effect)?.effectLabel;
+  const effectLabel = player.knockoutRushExpiresAtMs
+    ? "K.O. RUSH"
+    : Object.values(SLOP_CATALOG).find(definition => definition.effect === player.effect)?.effectLabel;
   if (player.status !== "alive") {
     const defeated = player.status === "defeated";
     return (
@@ -90,7 +91,7 @@ function PixelHog({
       </div>
     );
   }
-  const className = `farm-player${player.isYou ? " current-player" : ""}${targeted ? " targeted-player" : ""}${player.effect ? ` effect-${player.effect}` : ""}`;
+  const className = `farm-player${player.isYou ? " current-player" : ""}${targeted ? " targeted-player" : ""}${player.effect ? ` effect-${player.effect}` : ""}${player.knockoutRushExpiresAtMs ? " knockout-rush" : ""}`;
   const style = {
     left: `${player.x / FARM_WIDTH * 100}%`,
     top: `${player.y / FARM_HEIGHT * 100}%`,
@@ -181,6 +182,10 @@ function eventMessage(event: FarmEvent | SinglePlayerEvent): string {
   if (event.type === "bot_attack") {
     return `${event.botName} BIT YOU FOR ${event.damage}.${event.playerDefeated ? " YOU ARE BACON." : ` ${event.playerHealth} HP LEFT.`}`;
   }
+  if (event.type === "bot_battle") {
+    return `${event.botName} BIT ${event.targetName} FOR ${event.damage}.${event.targetDefeated ? " KNOCKOUT!" : ` ${event.targetHealth} HP LEFT.`}`;
+  }
+  if (event.type === "knockout_rush") return "K.O. RUSH: +4 DAMAGE / +20% SPEED / FASTER ATTACKS.";
   if (event.type === "victory") {
     return `${event.difficulty.toUpperCase()} ARENA CLEARED. FINAL SCORE: ${event.score}.`;
   }

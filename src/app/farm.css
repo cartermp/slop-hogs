@@ -637,6 +637,7 @@
 .effect-recursive .pixel-hog { filter: drop-shadow(-7px 2px 0 #68d9df) drop-shadow(7px -2px 0 #ff5e98); }
 .effect-collapsed .pixel-hog { filter: grayscale(.7) drop-shadow(4px 5px 0 rgb(43 29 34 / .35)); }
 .effect-premium .pixel-hog { filter: drop-shadow(0 0 8px #ffe458) drop-shadow(4px 5px 0 rgb(43 29 34 / .35)); }
+.knockout-rush .pixel-hog { filter: drop-shadow(0 0 9px #ff5e98) drop-shadow(0 0 3px #ffe458); animation: turbo-hog .22s steps(2) infinite; }
 .pixel-hog.action-bite { animation: hog-bite .58s steps(4); }
 .pixel-hog.action-fart { animation: hog-fart .85s steps(5); }
 
