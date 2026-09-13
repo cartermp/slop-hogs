@@ -27,8 +27,8 @@ export default async function Home({
   const query = await searchParams;
   const errorCode = typeof query.auth_error === "string" ? query.auth_error : "";
   const notice = messages[errorCode]
-    ?? (query.signed_in === "1" ? "Bluesky verified your account. Entering the shared farm..."
-      : query.signed_in === "github" ? "GitHub verified your account. Entering the shared farm..."
+    ?? (query.signed_in === "1" ? "Bluesky verified your account. Choose your arena."
+      : query.signed_in === "github" ? "GitHub verified your account. Choose your arena."
       : query.signed_out === "1" ? "You are signed out." : null);
 
   if (session) {
@@ -41,7 +41,7 @@ export default async function Home({
       <section className="login-terminal">
         <p className="pixel-kicker">SLOP SYSTEMS PRESENTS</p>
         <h1>SLOP<br /><span>HOGS</span></h1>
-        <p className="battle-royale-callout">A BATTLE ROYALE BETWEEN HOGS</p>
+        <p className="battle-royale-callout">HOG BATTLES, SHARED OR SOLO</p>
         <p className="battle-royale-rules">Bite. Fart. Eat slop. Be the last hog standing.</p>
         <div className="login-hog-stage" aria-hidden="true">
           <div className="login-pig">

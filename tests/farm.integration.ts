@@ -3,6 +3,7 @@ import { randomUUID } from "node:crypto";
 import { test } from "node:test";
 import { createDatabase } from "../src/lib/server/database.ts";
 import { actOnFarm, syncFarm } from "../src/lib/server/farm.ts";
+import { actOnSinglePlayer, syncSinglePlayer } from "../src/lib/server/single-player.ts";
 import { provisionHog } from "../src/lib/server/hogs.ts";
 import { migrate } from "../src/lib/server/migrations.ts";
 
@@ -233,6 +234,62 @@ test("concurrent arrivals join the same available field", async () => {
     await pool.query("DELETE FROM hog_lives WHERE owner_did=ANY($1)", [dids]);
     await pool.query("DELETE FROM accounts WHERE did=ANY($1)", [dids]);
     await pool.query("DELETE FROM farm_fields WHERE NOT EXISTS (SELECT 1 FROM farm_players WHERE farm_players.field_id=farm_fields.id)");
+    await pool.end();
+  }
+});
+
+test("single-player runs and achievements persist separately", async () => {
+  assert.ok(process.env.TEST_DATABASE_URL, "Set TEST_DATABASE_URL to a disposable PostgreSQL database");
+  const pool = createDatabase(process.env.TEST_DATABASE_URL);
+  const did = `did:plc:test${randomUUID().replaceAll("-", "")}`;
+  const now = Date.now();
+  try {
+    await migrate(pool);
+    await provisionHog(pool, did);
+    const started = await actOnSinglePlayer(pool, did, { type: "start", difficulty: "easy" }, now);
+    assert.equal(started.snapshot.singlePlayer.difficulty, "easy");
+    assert.equal(started.snapshot.players.length, 2);
+    assert.ok(started.snapshot.singlePlayer.achievements.unlocks.some(
+      unlock => unlock.id === "solo-table-for-one",
+    ));
+
+    const stored = (await pool.query<{ state: Record<string, unknown> }>(
+      "SELECT state FROM single_player_games WHERE owner_did=$1",
+      [did],
+    )).rows[0].state;
+    const player = stored.player as { x: number; y: number };
+    const bots = stored.bots as Array<{ x: number; y: number; health: number }>;
+    bots[0].x = player.x + 10;
+    bots[0].y = player.y;
+    bots[0].health = 1;
+    await pool.query(
+      "UPDATE single_player_games SET state=$2 WHERE owner_did=$1",
+      [did, stored],
+    );
+
+    const won = await actOnSinglePlayer(
+      pool,
+      did,
+      { type: "fart", targetId: "bot-1" },
+      now + 100,
+    );
+    assert.equal(won.snapshot.singlePlayer.status, "won");
+    assert.equal(won.snapshot.singlePlayer.achievements.progress.easyWins, 1);
+    for (const achievementId of [
+      "solo-first-blood",
+      "solo-survivor",
+      "solo-easy-win",
+      "solo-clean-plate",
+    ]) {
+      assert.ok(won.snapshot.singlePlayer.achievements.unlocks.some(
+        unlock => unlock.id === achievementId,
+      ));
+    }
+    assert.equal((await syncSinglePlayer(pool, did, now + 200)).snapshot.singlePlayer.status, "won");
+  } finally {
+    await pool.query("DELETE FROM app_sessions WHERE owner_did=$1", [did]);
+    await pool.query("DELETE FROM hog_lives WHERE owner_did=$1", [did]);
+    await pool.query("DELETE FROM accounts WHERE did=$1", [did]);
     await pool.end();
   }
 });

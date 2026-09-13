@@ -16,6 +16,8 @@ function describeCounts(counts: CleanupCounts): string {
     `${counts.giftTreats} visitor treat(s)`,
     `${counts.accountBlocks} account block(s)`,
     `${counts.giftQuotaRows} gift quota row(s)`,
+    `${counts.singlePlayerGames} single-player game(s)`,
+    `${counts.singlePlayerAchievementRows} single-player achievement row(s)`,
   ].join(", ");
 }
 

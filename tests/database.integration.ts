@@ -462,6 +462,8 @@ test("real PostgreSQL persistence, retries, isolation and rollback", async () =>
       giftTreats: 0,
       accountBlocks: 0,
       giftQuotaRows: 0,
+      singlePlayerGames: 0,
+      singlePlayerAchievementRows: 0,
     });
     assert.deepEqual(await deleteTestData(pool, testDids), {
       accounts: 6,
@@ -472,6 +474,8 @@ test("real PostgreSQL persistence, retries, isolation and rollback", async () =>
       giftTreats: 0,
       accountBlocks: 0,
       giftQuotaRows: 0,
+      singlePlayerGames: 0,
+      singlePlayerAchievementRows: 0,
     });
     assert.deepEqual(await previewTestDataCleanup(pool, testDids), {
       accounts: 0,
@@ -482,6 +486,8 @@ test("real PostgreSQL persistence, retries, isolation and rollback", async () =>
       giftTreats: 0,
       accountBlocks: 0,
       giftQuotaRows: 0,
+      singlePlayerGames: 0,
+      singlePlayerAchievementRows: 0,
     });
     const backupCheck = await prepareBackupRestoreCheck(pool);
     assert.match(backupCheck.challenge, /^[0-9a-f-]{36}$/);

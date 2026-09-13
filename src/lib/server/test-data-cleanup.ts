@@ -11,6 +11,8 @@ export interface CleanupCounts {
   giftTreats: number;
   accountBlocks: number;
   giftQuotaRows: number;
+  singlePlayerGames: number;
+  singlePlayerAchievementRows: number;
 }
 
 export interface CleanupArguments {
@@ -27,6 +29,8 @@ interface CleanupCountRow {
   gift_treats: number;
   account_blocks: number;
   gift_quota_rows: number;
+  single_player_games: number;
+  single_player_achievement_rows: number;
 }
 
 const protectedDidPrefixes = ["did:plc:deploymentcheck", "did:plc:backuprestorecheck"];
@@ -63,7 +67,13 @@ export async function previewTestDataCleanup(pool: Pool, dids: string[]): Promis
       (
         (SELECT count(*) FROM gift_sender_daily WHERE sender_did=ANY($1::text[]))
         + (SELECT count(*) FROM gift_recipient_daily WHERE recipient_did=ANY($1::text[]))
-      )::integer AS gift_quota_rows
+      )::integer AS gift_quota_rows,
+      (SELECT count(*)::integer FROM single_player_games
+        WHERE owner_did=ANY($1::text[])) AS single_player_games,
+      (
+        (SELECT count(*) FROM single_player_achievement_progress WHERE owner_did=ANY($1::text[]))
+        + (SELECT count(*) FROM single_player_achievement_unlocks WHERE owner_did=ANY($1::text[]))
+      )::integer AS single_player_achievement_rows
   `, [dids]);
   const row = result.rows[0];
   return {
@@ -75,6 +85,8 @@ export async function previewTestDataCleanup(pool: Pool, dids: string[]): Promis
     giftTreats: row.gift_treats,
     accountBlocks: row.account_blocks,
     giftQuotaRows: row.gift_quota_rows,
+    singlePlayerGames: row.single_player_games,
+    singlePlayerAchievementRows: row.single_player_achievement_rows,
   };
 }
 
@@ -120,6 +132,18 @@ export async function deleteTestData(pool: Pool, dids: string[]): Promise<Cleanu
       "DELETE FROM hog_lives WHERE owner_did=ANY($1::text[])",
       [dids],
     );
+    const singlePlayerUnlocks = await client.query(
+      "DELETE FROM single_player_achievement_unlocks WHERE owner_did=ANY($1::text[])",
+      [dids],
+    );
+    const singlePlayerProgress = await client.query(
+      "DELETE FROM single_player_achievement_progress WHERE owner_did=ANY($1::text[])",
+      [dids],
+    );
+    const singlePlayerGames = await client.query(
+      "DELETE FROM single_player_games WHERE owner_did=ANY($1::text[])",
+      [dids],
+    );
     const accounts = await client.query(
       "DELETE FROM accounts WHERE did=ANY($1::text[])",
       [dids],
@@ -133,6 +157,9 @@ export async function deleteTestData(pool: Pool, dids: string[]): Promise<Cleanu
       giftTreats: giftTreats.rowCount ?? 0,
       accountBlocks: accountBlocks.rowCount ?? 0,
       giftQuotaRows: (senderQuota.rowCount ?? 0) + (recipientQuota.rowCount ?? 0),
+      singlePlayerGames: singlePlayerGames.rowCount ?? 0,
+      singlePlayerAchievementRows:
+        (singlePlayerProgress.rowCount ?? 0) + (singlePlayerUnlocks.rowCount ?? 0),
     };
   });
 }
