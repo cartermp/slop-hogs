@@ -1,11 +1,14 @@
 import {
-  ATTACK_COOLDOWN_MS,
   FARM_HEIGHT,
   FARM_WIDTH,
+  KNOCKOUT_RUSH_DAMAGE_BONUS,
+  KNOCKOUT_RUSH_DURATION_MS,
+  KNOCKOUT_RUSH_SPEED_MULTIPLIER,
   MAX_HEALTH,
   SLOP_KINDS,
   STARTING_MASS,
   applySlop,
+  attackCooldownMs,
   battleRange,
   decayPsychosis,
   hogDiameter,
@@ -38,39 +41,52 @@ export interface SinglePlayerDifficultyDefinition {
   botSpeed: number;
   botThinkMs: number;
   activeSlop: number;
+  playerHunters: number;
 }
 
 export const SINGLE_PLAYER_DIFFICULTY: Record<SinglePlayerDifficulty, SinglePlayerDifficultyDefinition> = {
   easy: {
     label: "EASY",
-    description: "1 sleepy bot // 60 HP // extra slop",
-    botCount: 1,
-    botHealth: 60,
-    botDamage: 5,
-    botSpeed: 25,
-    botThinkMs: 1_600,
-    activeSlop: 18,
+    description: "2 scrappy bots // 68 HP // one hunts you",
+    botCount: 2,
+    botHealth: 68,
+    botDamage: 7,
+    botSpeed: 40,
+    botThinkMs: 1_250,
+    activeSlop: 17,
+    playerHunters: 1,
   },
   medium: {
     label: "MEDIUM",
-    description: "2 alert bots // 80 HP // standard trough",
-    botCount: 2,
-    botHealth: 80,
-    botDamage: 8,
-    botSpeed: 31,
-    botThinkMs: 1_150,
+    description: "3 mean bots // 82 HP // two hunt you",
+    botCount: 3,
+    botHealth: 82,
+    botDamage: 9,
+    botSpeed: 48,
+    botThinkMs: 1_100,
     activeSlop: 15,
+    playerHunters: 2,
   },
   hard: {
     label: "HARD",
-    description: "3 feral bots // 100 HP // scarce slop",
-    botCount: 3,
-    botHealth: 100,
-    botDamage: 12,
-    botSpeed: 38,
-    botThinkMs: 800,
-    activeSlop: 11,
+    description: "4 feral bots // 96 HP // two hunt you",
+    botCount: 4,
+    botHealth: 96,
+    botDamage: 11,
+    botSpeed: 55,
+    botThinkMs: 900,
+    activeSlop: 13,
+    playerHunters: 2,
   },
+};
+
+const LEGACY_SINGLE_PLAYER_LIMITS: Record<
+  SinglePlayerDifficulty,
+  { botCount: number; activeSlop: number }
+> = {
+  easy: { botCount: 1, activeSlop: 18 },
+  medium: { botCount: 2, activeSlop: 15 },
+  hard: { botCount: 3, activeSlop: 11 },
 };
 
 interface SinglePlayerCombatant {
@@ -87,6 +103,7 @@ interface SinglePlayerCombatant {
   status: FarmPlayerStatus;
   effect: HogEffect | null;
   effectExpiresAtMs: number | null;
+  knockoutRushExpiresAtMs: number | null;
   lastMovedAtMs: number;
   lastAttackAtMs: number | null;
   psychosisMovementMs: number;
@@ -118,6 +135,14 @@ export type SinglePlayerEvent = FarmEvent
     damage: number;
     playerHealth: number;
     playerDefeated: boolean;
+  }
+  | {
+    type: "bot_battle";
+    botName: string;
+    targetName: string;
+    damage: number;
+    targetHealth: number;
+    targetDefeated: boolean;
   }
   | { type: "victory"; difficulty: SinglePlayerDifficulty; score: number }
   | { type: "single_player_achievements_unlocked"; achievementIds: string[] };
@@ -160,11 +185,12 @@ export interface SinglePlayerResolution {
   events: SinglePlayerEvent[];
 }
 
-const BOT_NAMES = ["SLOP-BOT 01", "SLOP-BOT 02", "SLOP-BOT 03"] as const;
+const BOT_NAMES = ["SLOP-BOT 01", "SLOP-BOT 02", "SLOP-BOT 03", "SLOP-BOT 04"] as const;
 const BOT_SPAWNS = [
   { x: 790, y: 288 },
   { x: 690, y: 118 },
   { x: 690, y: 462 },
+  { x: 500, y: 90 },
 ] as const;
 const SLOP_LIFETIME_MS = 20_000;
 const MAX_BOT_STEPS_PER_REQUEST = 5;
@@ -195,7 +221,7 @@ export function parseSinglePlayerAction(value: unknown): SinglePlayerAction {
     && (value.type === "bite" || value.type === "fart")
     && hasExactKeys(value, ["type", "targetId"])
     && typeof value.targetId === "string"
-    && /^bot-[1-3]$/.test(value.targetId)
+    && /^bot-[1-4]$/.test(value.targetId)
   ) {
     return { type: value.type, targetId: value.targetId };
   }
@@ -263,6 +289,7 @@ function createCombatant(
     status: "alive",
     effect: null,
     effectExpiresAtMs: null,
+    knockoutRushExpiresAtMs: null,
     lastMovedAtMs: nowMs,
     lastAttackAtMs: null,
     psychosisMovementMs: 0,
@@ -313,6 +340,7 @@ function parseCombatant(value: unknown): SinglePlayerCombatant {
   const radius = typeof value.mass === "number" && Number.isFinite(value.mass)
     ? hogDiameter(value.mass) / 2
     : Number.NaN;
+  const knockoutRushExpiresAtMs = value.knockoutRushExpiresAtMs ?? null;
   if (
     typeof value.id !== "string"
     || typeof value.name !== "string"
@@ -326,9 +354,11 @@ function parseCombatant(value: unknown): SinglePlayerCombatant {
     || (value.score as number) < 0 || (value.slopEaten as number) < 0 || (value.knockouts as number) < 0
     || (value.effect !== null && !["turbo", "glitchy", "recursive", "collapsed", "premium"].includes(String(value.effect)))
     || (value.effectExpiresAtMs !== null && typeof value.effectExpiresAtMs !== "number")
+    || (knockoutRushExpiresAtMs !== null
+      && (typeof knockoutRushExpiresAtMs !== "number" || !Number.isFinite(knockoutRushExpiresAtMs)))
     || (value.lastAttackAtMs !== null && typeof value.lastAttackAtMs !== "number")
   ) throw new Error("Invalid single-player state");
-  return value as unknown as SinglePlayerCombatant;
+  return { ...value, knockoutRushExpiresAtMs } as unknown as SinglePlayerCombatant;
 }
 
 export function parseSinglePlayerState(value: unknown): SinglePlayerState {
@@ -359,6 +389,7 @@ export function parseSinglePlayerState(value: unknown): SinglePlayerState {
     return item as unknown as FarmSlop;
   });
   const definition = SINGLE_PLAYER_DIFFICULTY[value.difficulty];
+  const legacyLimits = LEGACY_SINGLE_PLAYER_LIMITS[value.difficulty];
   if (
     !Number.isSafeInteger(value.rngState) || value.rngState <= 0 || value.rngState > 0xffff_ffff
     || !Number.isSafeInteger(value.startedAtMs) || value.startedAtMs < 0
@@ -367,9 +398,9 @@ export function parseSinglePlayerState(value: unknown): SinglePlayerState {
     || !Number.isSafeInteger(value.nextSlopId) || value.nextSlopId < 1
     || !Number.isFinite(value.playerDamageTaken) || value.playerDamageTaken < 0
     || player.id !== "solo-player"
-    || bots.length !== definition.botCount
+    || (bots.length !== definition.botCount && bots.length !== legacyLimits.botCount)
     || bots.some((bot, index) => bot.id !== `bot-${index + 1}`)
-    || slop.length > definition.activeSlop
+    || slop.length > Math.max(definition.activeSlop, legacyLimits.activeSlop)
   ) throw new Error("Invalid single-player state");
   return {
     version: SINGLE_PLAYER_STATE_VERSION,
@@ -405,6 +436,9 @@ function expireEffect(combatant: SinglePlayerCombatant, nowMs: number): void {
     combatant.effect = null;
     combatant.effectExpiresAtMs = null;
   }
+  if (combatant.knockoutRushExpiresAtMs !== null && combatant.knockoutRushExpiresAtMs <= nowMs) {
+    combatant.knockoutRushExpiresAtMs = null;
+  }
 }
 
 function clampCombatantPosition(combatant: SinglePlayerCombatant): void {
@@ -423,41 +457,85 @@ function advanceBots(state: SinglePlayerState, nowMs: number): SinglePlayerEvent
   const firstStepAt = state.lastBotStepAtMs + definition.botThinkMs;
   for (let step = 0; step < steps && state.player.status === "alive"; step += 1) {
     const stepAt = firstStepAt + step * definition.botThinkMs;
-    for (const bot of state.bots) {
+    const livingBots = state.bots.filter(bot => bot.status === "alive");
+    const hunterIds = new Set<string>();
+    if (livingBots.length > 1) {
+      const firstHunter = Math.floor(randomBetween(state, 0, livingBots.length));
+      for (let index = 0; index < Math.min(definition.playerHunters, livingBots.length); index += 1) {
+        hunterIds.add(livingBots[(firstHunter + index) % livingBots.length].id);
+      }
+    } else if (livingBots[0]) {
+      hunterIds.add(livingBots[0].id);
+    }
+    const turnOrder = [...livingBots].sort(
+      (left, right) => Number(hunterIds.has(right.id)) - Number(hunterIds.has(left.id)),
+    );
+    for (const bot of turnOrder) {
       if (bot.status !== "alive" || state.player.status !== "alive") continue;
       expireEffect(bot, stepAt);
       expireEffect(state.player, stepAt);
-      const beforeDistance = Math.hypot(state.player.x - bot.x, state.player.y - bot.y);
-      if (beforeDistance > battleRange("bite", bot, state.player) * 0.9) {
-        const ratio = Math.min(1, definition.botSpeed / Math.max(1, beforeDistance));
-        const dx = (state.player.x - bot.x) * ratio;
-        const dy = (state.player.y - bot.y) * ratio;
-        bot.x = Math.min(FARM_WIDTH - 24, Math.max(24, bot.x + dx));
-        bot.y = Math.min(FARM_HEIGHT - 24, Math.max(24, bot.y + dy));
+      const otherBots = state.bots.filter(candidate => candidate.id !== bot.id && candidate.status === "alive");
+      const target = hunterIds.has(bot.id) || otherBots.length === 0
+        ? state.player
+        : otherBots.reduce((nearest, candidate) => {
+          const distance = Math.hypot(candidate.x - bot.x, candidate.y - bot.y);
+          const nearestDistance = Math.hypot(nearest.x - bot.x, nearest.y - bot.y);
+          return distance < nearestDistance ? candidate : nearest;
+        });
+      expireEffect(target, stepAt);
+      const beforeDistance = Math.hypot(target.x - bot.x, target.y - bot.y);
+      if (beforeDistance > battleRange("bite", bot, target) * 0.9) {
+        const rushSpeed = bot.knockoutRushExpiresAtMs !== null
+          ? KNOCKOUT_RUSH_SPEED_MULTIPLIER
+          : 1;
+        const ratio = Math.min(1, definition.botSpeed * rushSpeed / Math.max(1, beforeDistance));
+        const dx = (target.x - bot.x) * ratio;
+        const dy = (target.y - bot.y) * ratio;
+        bot.x += dx;
+        bot.y += dy;
+        clampCombatantPosition(bot);
         if (Math.abs(dx) > 0.1) bot.facing = dx < 0 ? "left" : "right";
         bot.updatedAtMs = stepAt;
       }
-      const distance = Math.hypot(state.player.x - bot.x, state.player.y - bot.y);
-      if (distance <= battleRange("bite", bot, state.player)) {
-        const blockedDamage = state.player.effect === "glitchy" ? 4 : 0;
-        const botDamage = Math.max(1, definition.botDamage - blockedDamage);
-        const health = Math.max(0, state.player.health - botDamage);
-        const damage = state.player.health - health;
-        const playerDefeated = health === 0;
-        state.player.health = health;
-        state.player.status = playerDefeated ? "defeated" : state.player.status;
-        state.player.effect = playerDefeated ? null : state.player.effect;
-        state.player.effectExpiresAtMs = playerDefeated ? null : state.player.effectExpiresAtMs;
-        state.player.updatedAtMs = stepAt;
-        state.playerDamageTaken += damage;
+      const distance = Math.hypot(target.x - bot.x, target.y - bot.y);
+      if (distance <= battleRange("bite", bot, target)) {
+        const blockedDamage = target.effect === "glitchy" ? 4 : 0;
+        const rushDamage = bot.knockoutRushExpiresAtMs !== null ? KNOCKOUT_RUSH_DAMAGE_BONUS : 0;
+        const requestedDamage = Math.max(1, definition.botDamage + rushDamage - blockedDamage);
+        const health = Math.max(0, target.health - requestedDamage);
+        const damage = target.health - health;
+        const targetDefeated = health === 0;
+        target.health = health;
+        target.status = targetDefeated ? "defeated" : target.status;
+        target.effect = targetDefeated ? null : target.effect;
+        target.effectExpiresAtMs = targetDefeated ? null : target.effectExpiresAtMs;
+        target.knockoutRushExpiresAtMs = targetDefeated ? null : target.knockoutRushExpiresAtMs;
+        target.updatedAtMs = stepAt;
         bot.lastAttackAtMs = stepAt;
-        events.push({
-          type: "bot_attack",
-          botName: bot.name,
-          damage,
-          playerHealth: health,
-          playerDefeated,
-        });
+        if (targetDefeated) {
+          bot.knockouts += 1;
+          bot.score += 250;
+          bot.knockoutRushExpiresAtMs = stepAt + KNOCKOUT_RUSH_DURATION_MS;
+        }
+        if (target.id === state.player.id) {
+          state.playerDamageTaken += damage;
+          events.push({
+            type: "bot_attack",
+            botName: bot.name,
+            damage,
+            playerHealth: health,
+            playerDefeated: targetDefeated,
+          });
+        } else {
+          events.push({
+            type: "bot_battle",
+            botName: bot.name,
+            targetName: target.name,
+            damage,
+            targetHealth: health,
+            targetDefeated,
+          });
+        }
       }
     }
   }
@@ -479,6 +557,7 @@ function applyPlayerMovement(
     status: player.status,
     effect: player.effect,
     effectExpiresAtMs: player.effectExpiresAtMs,
+    knockoutRushExpiresAtMs: player.knockoutRushExpiresAtMs,
     lastMovedAtMs: player.lastMovedAtMs,
   }, action, nowMs);
   const distance = Math.hypot(moved.x - player.x, moved.y - player.y);
@@ -537,7 +616,10 @@ function applyPlayerAttack(
   nowMs: number,
 ): FarmEvent[] {
   const player = state.player;
-  if (player.lastAttackAtMs !== null && nowMs - player.lastAttackAtMs < ATTACK_COOLDOWN_MS) {
+  if (
+    player.lastAttackAtMs !== null
+    && nowMs - player.lastAttackAtMs < attackCooldownMs(player.knockoutRushExpiresAtMs, nowMs)
+  ) {
     throw new Error("Attack is cooling down");
   }
   expireEffect(player, nowMs);
@@ -562,12 +644,25 @@ function applyPlayerAttack(
   if (Math.hypot(player.x - target.x, player.y - target.y) > battleRange(action.type, player, target)) {
     throw new Error("That opponent is out of range");
   }
-  const battle = resolveBattleAttack(player, target, action.type);
+  const battle = resolveBattleAttack(
+    {
+      ...player,
+      knockoutRush: player.knockoutRushExpiresAtMs !== null,
+    },
+    target,
+    action.type,
+  );
+  const knockoutRushExpiresAtMs = battle.attacker.status === "alive"
+    ? battle.targetDefeated
+      ? nowMs + KNOCKOUT_RUSH_DURATION_MS
+      : player.knockoutRushExpiresAtMs
+    : null;
   Object.assign(player, {
     mass: battle.attacker.mass,
     status: battle.attacker.status,
     effect: battle.attacker.effect,
     effectExpiresAtMs: battle.attacker.effect ? player.effectExpiresAtMs : null,
+    knockoutRushExpiresAtMs,
     knockouts: player.knockouts + (battle.targetDefeated ? 1 : 0),
     score: player.score + (battle.targetDefeated ? 250 : 0),
     lastAttackAtMs: nowMs,
@@ -581,6 +676,7 @@ function applyPlayerAttack(
     status: battle.target.status,
     effect: battle.target.effect,
     effectExpiresAtMs: battle.target.effect ? target.effectExpiresAtMs : null,
+    knockoutRushExpiresAtMs: battle.targetDefeated ? null : target.knockoutRushExpiresAtMs,
     updatedAtMs: nowMs,
   });
   const events: FarmEvent[] = [{
@@ -592,6 +688,9 @@ function applyPlayerAttack(
     psychosisDelta: battle.psychosisDelta,
     targetDefeated: battle.targetDefeated,
   }];
+  if (battle.targetDefeated && knockoutRushExpiresAtMs !== null) {
+    events.push({ type: "knockout_rush", expiresAtMs: knockoutRushExpiresAtMs });
+  }
   if (battle.attackerPopped) events.push({ type: "popped" });
   return events;
 }
@@ -649,6 +748,10 @@ export function singlePlayerFarmPlayers(state: SinglePlayerState, playerName: st
       ? combatant.effect
       : null,
     effectExpiresAtMs: combatant.effectExpiresAtMs,
+    knockoutRushExpiresAtMs: combatant.knockoutRushExpiresAtMs !== null
+      && combatant.knockoutRushExpiresAtMs > state.updatedAtMs
+      ? combatant.knockoutRushExpiresAtMs
+      : null,
     updatedAtMs: combatant.updatedAtMs,
     isYou: index === 0,
   }));
