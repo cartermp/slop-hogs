@@ -47,7 +47,7 @@ export interface SinglePlayerDifficultyDefinition {
 export const SINGLE_PLAYER_DIFFICULTY: Record<SinglePlayerDifficulty, SinglePlayerDifficultyDefinition> = {
   easy: {
     label: "EASY",
-    description: "2 scrappy bots // 68 HP // one hunts you",
+    description: "2 scrappy hogs // 68 HP // one hunts you",
     botCount: 2,
     botHealth: 68,
     botDamage: 7,
@@ -58,7 +58,7 @@ export const SINGLE_PLAYER_DIFFICULTY: Record<SinglePlayerDifficulty, SinglePlay
   },
   medium: {
     label: "MEDIUM",
-    description: "3 mean bots // 82 HP // two hunt you",
+    description: "3 mean hogs // 82 HP // two hunt you",
     botCount: 3,
     botHealth: 82,
     botDamage: 9,
@@ -69,7 +69,7 @@ export const SINGLE_PLAYER_DIFFICULTY: Record<SinglePlayerDifficulty, SinglePlay
   },
   hard: {
     label: "HARD",
-    description: "4 feral bots // 96 HP // two hunt you",
+    description: "4 feral hogs // 96 HP // two hunt you",
     botCount: 4,
     botHealth: 96,
     botDamage: 11,

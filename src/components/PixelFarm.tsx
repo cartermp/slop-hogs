@@ -239,7 +239,7 @@ function ModeSelect({
             <span className="mode-number">1P</span>
             <p className="pixel-kicker">PRIVATE PANDEMONIUM</p>
             <h3>SINGLE PLAYER</h3>
-            <p>Fight CPU hogs and unlock a separate set of persistent solo achievements.</p>
+            <p>Take on CPU hogs and earn solo achievements.</p>
             <div className="difficulty-grid" aria-label="Single-player difficulty">
               {SINGLE_PLAYER_DIFFICULTIES.map(difficulty => {
                 const definition = SINGLE_PLAYER_DIFFICULTY[difficulty];
