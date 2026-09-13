@@ -22,16 +22,9 @@ export function AchievementCabinet({
   return (
     <section className="achievement-cabinet" aria-labelledby="achievement-title">
       <div className="achievement-heading">
-        <div>
-          <p className="pixel-kicker">REWARD PROTOCOL // {ACHIEVEMENTS.length} BADGES</p>
-          <h2 id="achievement-title">SLOP HOG ACHIEVEMENTS</h2>
-        </div>
+        <h2 id="achievement-title">SLOP HOG ACHIEVEMENTS</h2>
         <strong>{String(unlocked.size).padStart(3, "0")} / {ACHIEVEMENTS.length} UNLOCKED</strong>
       </div>
-      <p className="achievement-intro">
-        Lifetime progress survives every redeployment. Unlocked badges are saved to your account.
-        {canShareToBluesky && " Share them through Bluesky without granting Slop Hogs posting permission."}
-      </p>
       <div className="achievement-grid">
         {ACHIEVEMENTS.map(achievement => {
           const isUnlocked = unlocked.has(achievement.id);

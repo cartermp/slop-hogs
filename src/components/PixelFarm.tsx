@@ -564,16 +564,26 @@ export function PixelFarm({ canShareToBluesky }: { canShareToBluesky: boolean })
       </section>
 
       <section className="slop-legend" aria-labelledby="slop-guide-title">
-        <div>
-          <p className="pixel-kicker">FIELD MANUAL</p>
-          <h2 id="slop-guide-title">KNOW YOUR SLOP</h2>
-        </div>
+        <h2 id="slop-guide-title">KNOW YOUR SLOP</h2>
         {Object.entries(SLOP_CATALOG).map(([kind, item]) => (
-          <article key={kind}>
-            <i className={`legend-sprite slop-${kind}`}>{item.shortLabel}</i>
-            <div>
-              <strong>{item.label}</strong>
-              <span>{item.description} +{item.mass} psychosis. {item.battleBonus}.</span>
+          <article className={`slop-card slop-card-${kind}`} key={kind}>
+            <header className="slop-card-heading">
+              <i className={`legend-sprite slop-${kind}`} aria-hidden="true">{item.shortLabel}</i>
+              <h3>{item.label}</h3>
+            </header>
+            <div className="slop-primary-stat">
+              <strong>+{item.mass}</strong>
+              <span>PSYCHOSIS</span>
+            </div>
+            <div className="slop-secondary-stats">
+              <div>
+                <span>POINTS</span>
+                <strong>+{item.points}</strong>
+              </div>
+              <div>
+                <span>{item.battleStat.label}</span>
+                <strong>{item.battleStat.value}</strong>
+              </div>
             </div>
           </article>
         ))}

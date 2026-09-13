@@ -34,7 +34,10 @@ export interface SlopDefinition {
   effect: HogEffect;
   effectLabel: string;
   effectDurationMs: number;
-  battleBonus: string;
+  battleStat: {
+    label: string;
+    value: string;
+  };
 }
 
 export const SLOP_CATALOG: Record<SlopKind, SlopDefinition> = {
@@ -47,7 +50,7 @@ export const SLOP_CATALOG: Record<SlopKind, SlopDefinition> = {
     effect: "turbo",
     effectLabel: "CONFIDENTLY FAST",
     effectDurationMs: 5_000,
-    battleBonus: "Bite range +40",
+    battleStat: { label: "BITE RANGE", value: "+40" },
   },
   context_overflow: {
     label: "Context Overflow",
@@ -58,7 +61,7 @@ export const SLOP_CATALOG: Record<SlopKind, SlopDefinition> = {
     effect: "glitchy",
     effectLabel: "CONTEXT LEAK",
     effectDurationMs: 6_000,
-    battleBonus: "Absorbs 4 incoming damage",
+    battleStat: { label: "DAMAGE BLOCK", value: "4" },
   },
   recursive_prompt: {
     label: "Recursive Prompt",
@@ -69,7 +72,7 @@ export const SLOP_CATALOG: Record<SlopKind, SlopDefinition> = {
     effect: "recursive",
     effectLabel: "RECURSING...",
     effectDurationMs: 7_000,
-    battleBonus: "Fart damage +6",
+    battleStat: { label: "FART DAMAGE", value: "+6" },
   },
   model_collapse: {
     label: "Model Collapse",
@@ -80,7 +83,7 @@ export const SLOP_CATALOG: Record<SlopKind, SlopDefinition> = {
     effect: "collapsed",
     effectLabel: "MODEL COLLAPSE",
     effectDurationMs: 6_000,
-    battleBonus: "Bite damage +7",
+    battleStat: { label: "BITE DAMAGE", value: "+7" },
   },
   premium_tokens: {
     label: "Premium Tokens",
@@ -91,7 +94,7 @@ export const SLOP_CATALOG: Record<SlopKind, SlopDefinition> = {
     effect: "premium",
     effectLabel: "SERIES A HOG",
     effectDurationMs: 5_000,
-    battleBonus: "All damage +3",
+    battleStat: { label: "ALL DAMAGE", value: "+3" },
   },
 };
 
