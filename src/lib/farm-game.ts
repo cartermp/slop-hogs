@@ -134,6 +134,11 @@ export interface FarmSnapshot {
   players: FarmPlayer[];
   slop: FarmSlop[];
   achievements: AchievementState;
+  multiplayer: {
+    status: "waiting" | "playing" | "finished";
+    winnerId: string | null;
+    winnerName: string | null;
+  };
 }
 
 export type FarmAction =
@@ -157,6 +162,7 @@ export type FarmEvent =
   | { type: "knockout_rush"; expiresAtMs: number }
   | { type: "popped" }
   | { type: "restarted" }
+  | { type: "multiplayer_victory"; score: number; knockouts: number }
   | { type: "achievements_unlocked"; achievementIds: string[] };
 
 export interface FarmActionResult {

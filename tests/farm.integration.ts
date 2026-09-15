@@ -142,12 +142,41 @@ test("the shared farm persists players, claims slop once, pops, and restarts", a
     assert.equal(defeated.snapshot.players.find(player => player.id === targetId)?.status, "defeated");
     assert.equal(defeated.snapshot.players.find(player => player.isYou)?.knockouts, 1);
     assert.equal(defeated.snapshot.achievements.progress.knockouts, 1);
+    assert.equal(defeated.snapshot.achievements.progress.wins, 1);
+    assert.equal(defeated.snapshot.multiplayer.status, "finished");
+    assert.equal(
+      defeated.snapshot.multiplayer.winnerId,
+      defeated.snapshot.players.find(player => player.isYou)?.id,
+    );
     assert.ok(defeated.snapshot.achievements.unlocks.some(unlock => unlock.id === "knockout-1"));
+    assert.ok(defeated.snapshot.achievements.unlocks.some(unlock => unlock.id === "victory-1"));
+    assert.ok(defeated.events.some(event => event.type === "multiplayer_victory"));
+    assert.equal(
+      Number((await pool.query<{ count: string }>(
+        "SELECT count(*)::text AS count FROM farm_victories WHERE winner_owner_did=$1",
+        [dids[0]],
+      )).rows[0].count),
+      1,
+    );
 
     now += 1;
-    const redeployed = await actOnFarm(pool, dids[1], { type: "restart" }, now);
-    assert.equal(redeployed.snapshot.players.find(player => player.isYou)?.status, "alive");
-    assert.equal(redeployed.snapshot.players.find(player => player.isYou)?.health, 100);
+    await assert.rejects(
+      actOnFarm(pool, dids[1], { type: "restart" }, now),
+      /Only the winning hog can reset the round/,
+    );
+    const resetByWinner = await actOnFarm(pool, dids[0], { type: "restart" }, now + 1);
+    assert.equal(resetByWinner.snapshot.multiplayer.status, "playing");
+    assert.ok(resetByWinner.snapshot.players.every(player => player.status === "alive"));
+    assert.ok(resetByWinner.snapshot.players.every(player => player.health === 100));
+    assert.equal(resetByWinner.snapshot.achievements.progress.runs, 2);
+    assert.ok(resetByWinner.snapshot.achievements.unlocks.some(unlock => unlock.id === "run-1"));
+    assert.equal(
+      Number((await pool.query<{ runs: number }>(
+        "SELECT runs FROM farm_achievement_progress WHERE owner_did=$1",
+        [dids[1]],
+      )).rows[0].runs),
+      2,
+    );
 
     await pool.query("DELETE FROM farm_slop");
     await pool.query(
@@ -171,16 +200,52 @@ test("the shared farm persists players, claims slop once, pops, and restarts", a
     assert.deepEqual(popped.events.slice(0, 2).map(event => event.type), ["slop_eaten", "popped"]);
     assert.equal(popped.snapshot.players.find(player => player.isYou)?.status, "popped");
     assert.equal(popped.snapshot.achievements.progress.pops, 1);
+    assert.equal(popped.snapshot.multiplayer.status, "finished");
 
     now += 1;
-    const restarted = await actOnFarm(pool, dids[0], { type: "restart" }, now);
+    await assert.rejects(
+      actOnFarm(pool, dids[0], { type: "restart" }, now),
+      /Only the winning hog can reset the round/,
+    );
+    const restarted = await actOnFarm(pool, dids[1], { type: "restart" }, now + 1);
     const fresh = restarted.snapshot.players.find(player => player.isYou)!;
     assert.equal(restarted.events[0].type, "restarted");
     assert.ok(restarted.snapshot.achievements.unlocks.some(unlock => unlock.id === "run-1"));
-    assert.equal(restarted.snapshot.achievements.progress.runs, 2);
+    assert.equal(restarted.snapshot.achievements.progress.runs, 3);
     assert.equal(fresh.status, "alive");
     assert.equal(fresh.mass, 24);
     assert.equal(fresh.score, 0);
+
+    await pool.query(
+      `UPDATE farm_players
+          SET x=400, y=300, mass=CASE WHEN owner_did=$1 THEN 96 ELSE 24 END,
+              health=CASE WHEN owner_did=$2 THEN 1 ELSE 100 END,
+              status='alive', effect=NULL, effect_expires_at=NULL,
+              popped_at=NULL, defeated_at=NULL, defeat_cause=NULL, last_attack_at=NULL,
+              updated_at=to_timestamp($3 / 1000.0)
+        WHERE owner_did=ANY($4)`,
+      [dids[0], dids[1], now + 1, dids],
+    );
+    now += 901;
+    const draw = await actOnFarm(pool, dids[0], { type: "bite", targetId }, now);
+    assert.ok(draw.events.some(event => event.type === "popped"));
+    assert.equal(
+      draw.events[0].type === "battle_attack" && draw.events[0].targetDefeated,
+      true,
+    );
+    assert.equal(draw.snapshot.multiplayer.status, "finished");
+    assert.equal(draw.snapshot.multiplayer.winnerId, null);
+    assert.equal(
+      Number((await pool.query<{ count: string }>(
+        "SELECT count(*)::text AS count FROM farm_victories WHERE winner_owner_did=ANY($1)",
+        [dids],
+      )).rows[0].count),
+      2,
+      "a draw does not register a victory",
+    );
+    const resetDraw = await actOnFarm(pool, dids[0], { type: "restart" }, now + 1);
+    assert.equal(resetDraw.snapshot.multiplayer.status, "playing");
+    assert.ok(resetDraw.snapshot.players.every(player => player.status === "alive"));
   } finally {
     await pool.query("DELETE FROM farm_slop");
     await pool.query("DELETE FROM app_sessions WHERE owner_did=ANY($1)", [dids]);

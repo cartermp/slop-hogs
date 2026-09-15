@@ -2,7 +2,7 @@ import { SLOP_CATALOG, SLOP_KINDS, type SlopKind } from "./farm-game.ts";
 
 export const HIGH_PSYCHOSIS_MASS = 62;
 export const HIGH_PSYCHOSIS_GRACE_MS = 400;
-export const ACHIEVEMENT_CATALOG_VERSION = 2;
+export const ACHIEVEMENT_CATALOG_VERSION = 3;
 
 export const ACHIEVEMENT_CATEGORIES = [
   "consumption",
@@ -11,6 +11,7 @@ export const ACHIEVEMENT_CATEGORIES = [
   "psychosis",
   "survival",
   "battle",
+  "victory",
   "specialist",
   "style",
 ] as const;
@@ -25,6 +26,7 @@ export type AchievementScalarMetric =
   | "highPsychosisDistance"
   | "pops"
   | "knockouts"
+  | "wins"
   | "runs"
   | "bestRunScore"
   | "bestRunSlop"
@@ -53,6 +55,7 @@ export interface AchievementProgress {
   lastHighMoveAtMs: number | null;
   pops: number;
   knockouts: number;
+  wins: number;
   runs: number;
   bestRunScore: number;
   bestRunSlop: number;
@@ -355,6 +358,26 @@ const knockouts = ladder({
   unit: "count",
 });
 
+const victories = ladder({
+  prefix: "victory",
+  titles: [
+    "Last Hog Standing",
+    "Repeat De-Fender",
+    "Certified Ham-pion",
+    "Pork Dynasty",
+  ],
+  descriptions: [
+    "Win a multiplayer round.",
+    "Win 5 multiplayer rounds.",
+    "Win 10 multiplayer rounds.",
+    "Win 25 multiplayer rounds. The farm is legally yours.",
+  ],
+  goals: [1, 5, 10, 25],
+  category: "victory",
+  metric: "wins",
+  unit: "count",
+});
+
 const kindLadders: Record<SlopKind, {
   titles: readonly string[];
   finale: string;
@@ -449,6 +472,7 @@ export const ACHIEVEMENTS: readonly AchievementDefinition[] = [
   ...popping,
   ...redeployments,
   ...knockouts,
+  ...victories,
   ...specialists,
   ...runScore,
   ...runSlop,
@@ -465,8 +489,8 @@ export const ACHIEVEMENTS: readonly AchievementDefinition[] = [
   },
 ];
 
-if (ACHIEVEMENTS.length !== 105) {
-  throw new Error(`Expected 105 achievements, received ${ACHIEVEMENTS.length}`);
+if (ACHIEVEMENTS.length !== 109) {
+  throw new Error(`Expected 109 achievements, received ${ACHIEVEMENTS.length}`);
 }
 
 export const ACHIEVEMENT_BY_ID = new Map(ACHIEVEMENTS.map(achievement => [achievement.id, achievement]));
@@ -482,6 +506,7 @@ export function emptyAchievementProgress(): AchievementProgress {
     lastHighMoveAtMs: null,
     pops: 0,
     knockouts: 0,
+    wins: 0,
     runs: 1,
     bestRunScore: 0,
     bestRunSlop: 0,

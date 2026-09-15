@@ -186,6 +186,9 @@ function eventMessage(event: FarmEvent | SinglePlayerEvent): string {
     return `${event.botName} BIT ${event.targetName} FOR ${event.damage}.${event.targetDefeated ? " KNOCKOUT!" : ` ${event.targetHealth} HP LEFT.`}`;
   }
   if (event.type === "knockout_rush") return "K.O. RUSH: +4 DAMAGE / +20% SPEED / FASTER ATTACKS.";
+  if (event.type === "multiplayer_victory") {
+    return `LAST HOG STANDING. ${event.knockouts} KNOCKOUTS / ${event.score} POINTS / ZERO NOTES.`;
+  }
   if (event.type === "victory") {
     return `${event.difficulty.toUpperCase()} ARENA CLEARED. FINAL SCORE: ${event.score}.`;
   }
@@ -431,7 +434,16 @@ export function PixelFarm({ canShareToBluesky }: { canShareToBluesky: boolean })
 
   const ownHog = snapshot?.players.find(player => player.isYou) ?? null;
   const singlePlayer = snapshot && "singlePlayer" in snapshot ? snapshot.singlePlayer : null;
-  const runIsActive = mode !== "single" || singlePlayer?.status === "playing";
+  const multiplayer = snapshot && "multiplayer" in snapshot ? snapshot.multiplayer : null;
+  const runIsActive = mode === "single"
+    ? singlePlayer?.status === "playing"
+    : multiplayer?.status !== "finished";
+  const isMultiplayerWinner = Boolean(
+    mode === "multiplayer"
+    && ownHog
+    && multiplayer?.status === "finished"
+    && multiplayer.winnerId === ownHog.id,
+  );
   const opponents = useMemo(
     () => snapshot?.players.filter(player => !player.isYou && player.status === "alive") ?? [],
     [snapshot],
@@ -632,7 +644,7 @@ export function PixelFarm({ canShareToBluesky }: { canShareToBluesky: boolean })
             <i className={mode === "single" ? "solo-dot" : "online-dot"} />
             {mode === "single"
               ? `${singlePlayer?.botsRemaining ?? "-"} CPU HOGS LEFT`
-              : `${Math.max(1, snapshot?.players.length ?? 1)} HOGS ONLINE`}
+              : `${snapshot?.players.filter(player => player.status === "alive").length ?? "-"} HOGS LEFT`}
           </span>
           <button type="button" className="mode-switch-button" onClick={chooseAnotherMode}>[ CHANGE MODE ]</button>
           <form action="/oauth/logout" method="post">
@@ -710,15 +722,45 @@ export function PixelFarm({ canShareToBluesky }: { canShareToBluesky: boolean })
                 <div>
                   FINAL SCORE: {String(ownHog.score).padStart(6, "0")}<br />
                   KNOCKOUTS: {ownHog.knockouts}
+                  {mode === "multiplayer" && multiplayer?.winnerName && (
+                    <><br />LAST HOG: {multiplayer.winnerName}</>
+                  )}
                 </div>
-                <button type="button" onClick={restart} disabled={requestInFlight.current}>
-                  {mode === "single" ? "[ TRY SAME DIFFICULTY ]" : "[ DEPLOY FRESH HOG ]"}
-                </button>
-                {mode === "single" && (
-                  <button type="button" className="overlay-secondary-button" onClick={chooseAnotherMode}>
-                    [ CHANGE DIFFICULTY ]
+                {(mode === "single"
+                  || multiplayer?.status === "waiting"
+                  || (multiplayer?.status === "finished" && multiplayer.winnerId === null)) && (
+                  <button type="button" onClick={restart} disabled={requestInFlight.current}>
+                    {mode === "single" ? "[ TRY SAME DIFFICULTY ]"
+                      : multiplayer?.status === "finished" ? "[ RESET THE DRAW ]"
+                      : "[ DEPLOY FRESH HOG ]"}
                   </button>
                 )}
+                {(mode === "single" || multiplayer?.status === "finished") && (
+                  <button type="button" className="overlay-secondary-button" onClick={chooseAnotherMode}>
+                    {mode === "single" ? "[ CHANGE DIFFICULTY ]" : "[ LEAVE THIS TROUGH ]"}
+                  </button>
+                )}
+              </div>
+            )}
+            {snapshot && ownHog && isMultiplayerWinner && "achievements" in snapshot && (
+              <div className="pop-overlay victory-overlay multiplayer-victory-overlay" role="dialog" aria-modal="true" aria-labelledby="multiplayer-victory-title">
+                <div className="victory-confetti" aria-hidden="true">
+                  {Array.from({ length: 16 }, (_, index) => <i key={index} />)}
+                </div>
+                <p>*** THE FARM HAS BEEN RATIOED ***</p>
+                <h2 id="multiplayer-victory-title">YOU ARE THE LAST<br />HOG STANDING</h2>
+                <strong className="victory-punchline">ALL OTHER BACON HAS BEEN DEPLATFORMED.</strong>
+                <div>
+                  FINAL SCORE: {String(ownHog.score).padStart(6, "0")}<br />
+                  KNOCKOUTS: {ownHog.knockouts}<br />
+                  LIFETIME WINS: {snapshot.achievements.progress.wins}
+                </div>
+                <button type="button" onClick={restart} disabled={requestInFlight.current}>
+                  [ RESET THE TROUGH ]
+                </button>
+                <button type="button" className="overlay-secondary-button" onClick={chooseAnotherMode}>
+                  [ RETIRE UNDEFEATED ]
+                </button>
               </div>
             )}
             {ownHog && singlePlayer?.status === "won" && (
