@@ -769,6 +769,58 @@
   color: #ffe66d;
   text-shadow: 5px 5px 0 #41612e;
 }
+.multiplayer-victory-overlay {
+  overflow: hidden;
+  background:
+    repeating-radial-gradient(circle at center, rgb(255 230 109 / .08) 0 8px, transparent 9px 32px),
+    rgb(24 8 24 / .94);
+}
+.multiplayer-victory-overlay::before {
+  border-style: double;
+  border-width: 9px;
+  box-shadow: inset 0 0 0 5px #ff4f87;
+}
+.victory-punchline {
+  position: relative;
+  z-index: 1;
+  margin: -12px 0 18px;
+  color: #ff91b4;
+  font: 9px/1.5 var(--pixel);
+}
+.victory-confetti {
+  position: absolute;
+  inset: 0;
+  pointer-events: none;
+}
+.victory-confetti i {
+  position: absolute;
+  top: -12%;
+  left: calc((var(--confetti-index) + 1) * 5.8%);
+  width: 10px;
+  height: 18px;
+  background: #ffe66d;
+  box-shadow: 4px 4px 0 #ff4f87;
+  animation: victory-confetti 2.4s steps(12) infinite;
+  animation-delay: calc(var(--confetti-index) * -.17s);
+}
+.victory-confetti i:nth-child(3n) { background: #bfe64d; transform: rotate(35deg); }
+.victory-confetti i:nth-child(4n) { background: #67d7ff; transform: rotate(-20deg); }
+.victory-confetti i:nth-child(1) { --confetti-index: 0; }
+.victory-confetti i:nth-child(2) { --confetti-index: 1; }
+.victory-confetti i:nth-child(3) { --confetti-index: 2; }
+.victory-confetti i:nth-child(4) { --confetti-index: 3; }
+.victory-confetti i:nth-child(5) { --confetti-index: 4; }
+.victory-confetti i:nth-child(6) { --confetti-index: 5; }
+.victory-confetti i:nth-child(7) { --confetti-index: 6; }
+.victory-confetti i:nth-child(8) { --confetti-index: 7; }
+.victory-confetti i:nth-child(9) { --confetti-index: 8; }
+.victory-confetti i:nth-child(10) { --confetti-index: 9; }
+.victory-confetti i:nth-child(11) { --confetti-index: 10; }
+.victory-confetti i:nth-child(12) { --confetti-index: 11; }
+.victory-confetti i:nth-child(13) { --confetti-index: 12; }
+.victory-confetti i:nth-child(14) { --confetti-index: 13; }
+.victory-confetti i:nth-child(15) { --confetti-index: 14; }
+.victory-confetti i:nth-child(16) { --confetti-index: 15; }
 
 .console-footer {
   display: grid;
@@ -1290,6 +1342,11 @@
 
 @media (prefers-reduced-motion: reduce) {
   .online-dot, .slop-pickup, .effect-bubble, .pixel-hog, .pixel-pop,
-  .battle-effect, .farm-loading, .login-pig { animation: none; }
+  .battle-effect, .farm-loading, .login-pig, .victory-confetti i { animation: none; }
   .battle-effect { display: none; }
+}
+
+@keyframes victory-confetti {
+  from { translate: 0 -12vh; rotate: 0deg; }
+  to { translate: 12px 72vh; rotate: 540deg; }
 }

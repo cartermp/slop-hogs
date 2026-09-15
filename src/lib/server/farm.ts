@@ -89,6 +89,7 @@ interface AchievementProgressRow {
   total_slop: string;
   total_score: string;
   knockouts: string;
+  wins: string;
   total_distance: number;
   high_psychosis_distance: number;
   current_high_psychosis_ms: string;
@@ -106,6 +107,15 @@ interface AchievementProgressRow {
   last_slop_kind: SlopKind | null;
   same_kind_streak: number;
   best_same_kind_streak: number;
+}
+
+interface FieldRoundRow {
+  round_number: number;
+  round_started_at: Date | null;
+  round_finished_at: Date | null;
+  winner_owner_did: string | null;
+  winner_player_id: string | null;
+  winner_handle: string | null;
 }
 
 function randomSpawn(): { x: number; y: number } {
@@ -150,17 +160,30 @@ async function ensurePlayer(client: PoolClient, ownerDid: string, nowMs: number)
     `SELECT field.id AS field_id
        FROM farm_fields field
        JOIN farm_players player ON player.field_id=field.id
-      WHERE player.updated_at >= to_timestamp($1 / 1000.0)
-        AND player.owner_did<>$2
+       WHERE field.round_finished_at IS NULL
+         AND player.updated_at >= to_timestamp($1 / 1000.0)
+         AND player.owner_did<>$2
       GROUP BY field.id, field.last_joined_at
      HAVING count(*) < $3
       ORDER BY field.last_joined_at DESC, field.id
       LIMIT 1`,
     [activeAfterMs, ownerDid, FIELD_CAPACITY],
   );
-  const fieldId = available.rows[0]?.field_id ?? randomUUID();
+  let fieldId = available.rows[0]?.field_id ?? randomUUID();
   if (!available.rowCount) {
     await client.query("INSERT INTO farm_fields(id) VALUES ($1)", [fieldId]);
+    await lockField(client, fieldId);
+  } else {
+    await lockField(client, fieldId);
+    const selectedField = await client.query<{ round_finished_at: Date | null }>(
+      "SELECT round_finished_at FROM farm_fields WHERE id=$1",
+      [fieldId],
+    );
+    if (selectedField.rows[0]?.round_finished_at) {
+      fieldId = randomUUID();
+      await client.query("INSERT INTO farm_fields(id) VALUES ($1)", [fieldId]);
+      await lockField(client, fieldId);
+    }
   }
   const spawn = randomSpawn();
   await client.query(
@@ -212,6 +235,7 @@ function mapAchievementProgress(row: AchievementProgressRow): AchievementProgres
     totalSlop: Number(row.total_slop),
     totalScore: Number(row.total_score),
     knockouts: Number(row.knockouts),
+    wins: Number(row.wins),
     totalDistance: row.total_distance,
     highPsychosisDistance: row.high_psychosis_distance,
     currentHighPsychosisMs: Number(row.current_high_psychosis_ms),
@@ -238,7 +262,7 @@ async function readAchievementProgress(
   lock = false,
 ): Promise<AchievementProgress> {
   const result = await client.query<AchievementProgressRow>(
-    `SELECT total_slop, total_score, knockouts, total_distance, high_psychosis_distance,
+    `SELECT total_slop, total_score, knockouts, wins, total_distance, high_psychosis_distance,
             current_high_psychosis_ms, best_high_psychosis_ms, last_high_move_at,
             pops, runs, best_run_score, best_run_slop, current_run_distance,
             best_run_distance, kind_counts, run_kind_mask, max_run_variety,
@@ -266,7 +290,7 @@ async function persistAchievementProgress(
             pops=$9, runs=$10, best_run_score=$11, best_run_slop=$12,
             current_run_distance=$13, best_run_distance=$14, kind_counts=$15,
             run_kind_mask=$16, max_run_variety=$17, last_slop_kind=$18,
-            same_kind_streak=$19, best_same_kind_streak=$20, knockouts=$21,
+            same_kind_streak=$19, best_same_kind_streak=$20, knockouts=$21, wins=$22,
             updated_at=clock_timestamp()
       WHERE owner_did=$1`,
     [
@@ -291,6 +315,7 @@ async function persistAchievementProgress(
       progress.sameKindStreak,
       progress.bestSameKindStreak,
       progress.knockouts,
+      progress.wins,
     ],
   );
 }
@@ -405,13 +430,209 @@ function mapSlop(row: SlopRow): FarmSlop {
   };
 }
 
+async function lockField(client: PoolClient, fieldId: string): Promise<void> {
+  await client.query(
+    "SELECT pg_advisory_xact_lock(hashtextextended($1, 734010))",
+    [fieldId],
+  );
+}
+
+async function ensureRoundStarted(client: PoolClient, fieldId: string, nowMs: number): Promise<void> {
+  await client.query(
+    `UPDATE farm_fields
+        SET round_started_at=to_timestamp($2 / 1000.0)
+      WHERE id=$1
+        AND round_started_at IS NULL
+        AND round_finished_at IS NULL
+        AND (
+          SELECT count(*)
+            FROM farm_players
+           WHERE field_id=$1
+             AND status='alive'
+             AND updated_at >= to_timestamp(($2 - $3) / 1000.0)
+        ) >= 2`,
+    [fieldId, nowMs, ONLINE_WINDOW_MS],
+  );
+}
+
+async function readRound(client: PoolClient, fieldId: string): Promise<FieldRoundRow> {
+  const result = await client.query<FieldRoundRow>(
+    `SELECT field.round_number, field.round_started_at, field.round_finished_at,
+            field.winner_owner_did, winner.player_id AS winner_player_id,
+            account.handle AS winner_handle
+       FROM farm_fields field
+       LEFT JOIN farm_players winner
+         ON winner.field_id=field.id AND winner.owner_did=field.winner_owner_did
+       LEFT JOIN accounts account ON account.did=field.winner_owner_did
+      WHERE field.id=$1`,
+    [fieldId],
+  );
+  if (!result.rows[0]) throw new Error("Farm field is missing");
+  return result.rows[0];
+}
+
+async function finishRoundIfWon(
+  client: PoolClient,
+  fieldId: string,
+  actingOwnerDid: string,
+  nowMs: number,
+): Promise<FarmEvent[]> {
+  const round = await client.query<Pick<FieldRoundRow,
+    "round_number" | "round_started_at" | "round_finished_at">>(
+    `SELECT round_number, round_started_at, round_finished_at
+       FROM farm_fields
+      WHERE id=$1
+      FOR UPDATE`,
+    [fieldId],
+  );
+  const field = round.rows[0];
+  if (!field?.round_started_at || field.round_finished_at) return [];
+
+  const survivors = await client.query<{
+    owner_did: string;
+    score: number;
+    knockouts: number;
+  }>(
+    `SELECT player.owner_did, player.score, player.knockouts
+       FROM farm_players player
+       JOIN accounts account ON account.did=player.owner_did
+      WHERE player.field_id=$1
+        AND player.status='alive'
+        AND player.updated_at >= to_timestamp(($2 - $3) / 1000.0)
+      FOR UPDATE OF player`,
+    [fieldId, nowMs, ONLINE_WINDOW_MS],
+  );
+  if (survivors.rows.length > 1) return [];
+  if (survivors.rows.length === 0) {
+    await client.query(
+      `UPDATE farm_fields
+          SET round_finished_at=to_timestamp($2 / 1000.0), winner_owner_did=NULL
+        WHERE id=$1`,
+      [fieldId, nowMs],
+    );
+    return [];
+  }
+
+  const winner = survivors.rows[0];
+  await client.query(
+    `UPDATE farm_fields
+        SET round_finished_at=to_timestamp($2 / 1000.0), winner_owner_did=$3
+      WHERE id=$1`,
+    [fieldId, nowMs, winner.owner_did],
+  );
+  await client.query(
+    `INSERT INTO farm_victories(
+       field_id, round_number, winner_owner_did, winner_score, winner_knockouts, won_at
+     ) VALUES ($1,$2,$3,$4,$5,to_timestamp($6 / 1000.0))`,
+    [fieldId, field.round_number, winner.owner_did, winner.score, winner.knockouts, nowMs],
+  );
+
+  await ensureAchievementProgress(client, winner.owner_did);
+  const previous = await readAchievementProgress(client, winner.owner_did, true);
+  const progress = { ...previous, wins: previous.wins + 1 };
+  await persistAchievementProgress(client, winner.owner_did, progress);
+  const unlocked = await unlockEligibleAchievements(
+    client,
+    winner.owner_did,
+    progress,
+    newlyEligibleAchievements(previous, progress),
+  );
+  if (winner.owner_did !== actingOwnerDid) return [];
+
+  const events: FarmEvent[] = [{
+    type: "multiplayer_victory",
+    score: winner.score,
+    knockouts: winner.knockouts,
+  }];
+  if (unlocked.length) events.push({ type: "achievements_unlocked", achievementIds: unlocked });
+  return events;
+}
+
+async function resetFinishedRound(
+  client: PoolClient,
+  fieldId: string,
+  ownerDid: string,
+  nowMs: number,
+): Promise<void> {
+  const field = await client.query<Pick<FieldRoundRow, "round_finished_at" | "winner_owner_did">>(
+    `SELECT round_finished_at, winner_owner_did
+       FROM farm_fields
+      WHERE id=$1
+      FOR UPDATE`,
+    [fieldId],
+  );
+  const round = field.rows[0];
+  if (!round?.round_finished_at) {
+    throw new Error("The round is not finished");
+  }
+  if (round.winner_owner_did !== null && round.winner_owner_did !== ownerDid) {
+    throw new Error("Only the winning hog can reset the round");
+  }
+
+  const participants = await client.query<{ owner_did: string }>(
+    `SELECT owner_did
+       FROM farm_players
+      WHERE field_id=$1
+        AND (owner_did=$2 OR updated_at >= to_timestamp(($3 - $4) / 1000.0))
+      FOR UPDATE`,
+    [fieldId, ownerDid, nowMs, ONLINE_WINDOW_MS],
+  );
+  for (const participant of participants.rows) {
+    const spawn = randomSpawn();
+    await client.query(
+      `UPDATE farm_players
+          SET x=$2, y=$3, facing='right', mass=$4, score=0, slop_eaten=0, health=$5,
+              knockouts=0, status='alive', effect=NULL, effect_expires_at=NULL,
+              knockout_rush_expires_at=NULL, last_moved_at=to_timestamp($6 / 1000.0),
+              last_attack_at=NULL, psychosis_movement_ms=0,
+              updated_at=to_timestamp($6 / 1000.0), popped_at=NULL,
+              defeated_at=NULL, defeat_cause=NULL
+        WHERE owner_did=$1`,
+      [participant.owner_did, spawn.x, spawn.y, STARTING_MASS, MAX_HEALTH, nowMs],
+    );
+    if (participant.owner_did !== ownerDid) {
+      await ensureAchievementProgress(client, participant.owner_did);
+      const previous = await readAchievementProgress(client, participant.owner_did, true);
+      const progress = advanceAchievementProgress(previous, {
+        distance: 0,
+        movementElapsedMs: 0,
+        movedAtHighPsychosis: false,
+        nowMs,
+        slopKind: null,
+        pointsGained: 0,
+        runScore: 0,
+        runSlop: 0,
+        popped: false,
+        knockouts: 0,
+        restarted: true,
+      });
+      await persistAchievementProgress(client, participant.owner_did, progress);
+      await unlockEligibleAchievements(
+        client,
+        participant.owner_did,
+        progress,
+        newlyEligibleAchievements(previous, progress),
+      );
+    }
+  }
+  await client.query(
+    `UPDATE farm_fields
+        SET round_number=round_number+1,
+            round_started_at=CASE WHEN $3 >= 2 THEN to_timestamp($2 / 1000.0) ELSE NULL END,
+            round_finished_at=NULL, winner_owner_did=NULL,
+            last_joined_at=to_timestamp($2 / 1000.0)
+      WHERE id=$1`,
+    [fieldId, nowMs, participants.rows.length],
+  );
+}
+
 async function readSnapshot(
   client: PoolClient,
   ownerDid: string,
   fieldId: string,
   nowMs: number,
 ): Promise<FarmSnapshot> {
-  const [players, slop, achievements] = await Promise.all([
+  const [players, slop, achievements, round] = await Promise.all([
     client.query<PlayerRow>(
       `SELECT player.owner_did, player.player_id, player.field_id,
               player.x, player.y, player.facing,
@@ -437,12 +658,21 @@ async function readSnapshot(
       [fieldId, nowMs],
     ),
     readAchievementState(client, ownerDid),
+    readRound(client, fieldId),
   ]);
   return {
     serverNowMs: nowMs,
     players: players.rows.map(row => mapPlayer(row, ownerDid, nowMs)),
     slop: slop.rows.map(mapSlop),
     achievements,
+    multiplayer: {
+      status: round.round_finished_at ? "finished"
+        : round.round_started_at ? "playing" : "waiting",
+      winnerId: round.winner_player_id,
+      winnerName: round.winner_owner_did
+        ? round.winner_handle ?? round.winner_owner_did
+        : null,
+    },
   };
 }
 
@@ -463,6 +693,7 @@ export async function syncFarm(pool: Pool, ownerDid: string, suppliedNowMs?: num
       return readSnapshot(client, ownerDid, existing.rows[0].field_id, nowMs);
     }
     const fieldId = await ensurePlayer(client, ownerDid, nowMs);
+    await lockField(client, fieldId);
     await ensureAchievementProgress(client, ownerDid);
     await client.query(
       `UPDATE farm_players
@@ -470,12 +701,14 @@ export async function syncFarm(pool: Pool, ownerDid: string, suppliedNowMs?: num
         WHERE owner_did=$1`,
       [ownerDid, nowMs],
     );
+    await ensureRoundStarted(client, fieldId, nowMs);
     const initializeCatalog = await initializeAchievementCatalog(client, ownerDid);
     await maintainSlop(client, fieldId, nowMs);
     if (initializeCatalog) {
       const progress = await readAchievementProgress(client, ownerDid);
       await unlockEligibleAchievements(client, ownerDid, progress);
     }
+    await finishRoundIfWon(client, fieldId, ownerDid, nowMs);
     return readSnapshot(client, ownerDid, fieldId, nowMs);
   });
 }
@@ -498,6 +731,8 @@ export async function actOnFarm(
       await client.query("SELECT pg_advisory_xact_lock(734008)");
     }
     const fieldId = await ensurePlayer(client, ownerDid, nowMs);
+    await lockField(client, fieldId);
+    await ensureRoundStarted(client, fieldId, nowMs);
     await ensureAchievementProgress(client, ownerDid);
     const selected = await client.query<ActionPlayerRow>(
       `SELECT owner_did, player_id, field_id, x, y, facing, mass, score, slop_eaten, health,
@@ -515,19 +750,25 @@ export async function actOnFarm(
     let events: FarmEvent[] = [];
 
     if (action.type === "restart") {
-      if (row.status === "alive") throw new Error("Only a stopped hog can redeploy");
-      const spawn = randomSpawn();
-      await client.query(
-        `UPDATE farm_players
-            SET x=$2, y=$3, facing='right', mass=$4, score=0, slop_eaten=0, health=$5,
-                status='alive', effect=NULL, effect_expires_at=NULL, knockout_rush_expires_at=NULL,
-                last_moved_at=to_timestamp($6 / 1000.0), last_attack_at=NULL,
-                psychosis_movement_ms=0,
-                updated_at=to_timestamp($6 / 1000.0), popped_at=NULL,
-                defeated_at=NULL, defeat_cause=NULL
-          WHERE owner_did=$1`,
-        [ownerDid, spawn.x, spawn.y, STARTING_MASS, MAX_HEALTH, nowMs],
-      );
+      const round = await readRound(client, fieldId);
+      if (round.round_finished_at) {
+        await resetFinishedRound(client, fieldId, ownerDid, nowMs);
+      } else {
+        if (round.round_started_at) throw new Error("Finish the current round first");
+        if (row.status === "alive") throw new Error("Only a stopped hog can redeploy");
+        const spawn = randomSpawn();
+        await client.query(
+          `UPDATE farm_players
+              SET x=$2, y=$3, facing='right', mass=$4, score=0, slop_eaten=0, health=$5,
+                  status='alive', effect=NULL, effect_expires_at=NULL, knockout_rush_expires_at=NULL,
+                  last_moved_at=to_timestamp($6 / 1000.0), last_attack_at=NULL,
+                  psychosis_movement_ms=0,
+                  updated_at=to_timestamp($6 / 1000.0), popped_at=NULL,
+                  defeated_at=NULL, defeat_cause=NULL
+            WHERE owner_did=$1`,
+          [ownerDid, spawn.x, spawn.y, STARTING_MASS, MAX_HEALTH, nowMs],
+        );
+      }
       events = [{ type: "restarted" }];
       nextAchievementProgress = advanceAchievementProgress(achievementProgress, {
         distance: 0,
@@ -832,6 +1073,7 @@ export async function actOnFarm(
     );
     if (unlocked.length) events.push({ type: "achievements_unlocked", achievementIds: unlocked });
     await maintainSlop(client, fieldId, nowMs);
+    events.push(...await finishRoundIfWon(client, fieldId, ownerDid, nowMs));
     return { snapshot: await readSnapshot(client, ownerDid, fieldId, nowMs), events };
   });
 }

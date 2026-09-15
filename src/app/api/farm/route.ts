@@ -99,6 +99,9 @@ export async function POST(request: Request) {
         : error instanceof ReadOnlyError ? 503
         : error instanceof SyntaxError
           || message === "Only a stopped hog can redeploy"
+          || message === "Only the winning hog can reset the round"
+          || message === "The round is not finished"
+          || message === "Finish the current round first"
           || message === "Only living hogs can battle"
           || message === "That opponent is no longer in the battle"
           || message === "That opponent is out of range"

@@ -9,13 +9,14 @@ import {
   emptyAchievementProgress,
 } from "../src/lib/achievements.ts";
 
-test("the catalog contains 105 unique, measurable achievements", () => {
-  assert.equal(ACHIEVEMENTS.length, 105);
-  assert.equal(new Set(ACHIEVEMENTS.map(achievement => achievement.id)).size, 105);
+test("the catalog contains 109 unique, measurable achievements", () => {
+  assert.equal(ACHIEVEMENTS.length, 109);
+  assert.equal(new Set(ACHIEVEMENTS.map(achievement => achievement.id)).size, 109);
   assert.ok(ACHIEVEMENTS.every(achievement => achievement.goal > 0));
   assert.ok(ACHIEVEMENTS.some(achievement => achievement.metric === "bestHighPsychosisMs"));
   assert.ok(ACHIEVEMENTS.some(achievement => achievement.metric === "maxRunVariety"));
   assert.ok(ACHIEVEMENTS.some(achievement => achievement.metric === "knockouts"));
+  assert.ok(ACHIEVEMENTS.some(achievement => achievement.metric === "wins"));
   assert.ok(ACHIEVEMENTS.every(achievement => {
     const text = new URL(achievementShareUrl(achievement, "HOG-CAFE")).searchParams.get("text") ?? "";
     return [...text].length <= 300;
@@ -131,4 +132,12 @@ test("knockouts advance the battle achievement ladder", () => {
   });
   assert.equal(progress.knockouts, 1);
   assert.ok(eligibleAchievements(progress).some(achievement => achievement.id === "knockout-1"));
+});
+
+test("multiplayer wins unlock lifetime victory achievements", () => {
+  const progress = { ...emptyAchievementProgress(), wins: 5 };
+  const eligible = eligibleAchievements(progress);
+  assert.ok(eligible.some(achievement => achievement.id === "victory-1"));
+  assert.ok(eligible.some(achievement => achievement.id === "victory-2"));
+  assert.ok(!eligible.some(achievement => achievement.id === "victory-3"));
 });
