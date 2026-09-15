@@ -138,22 +138,38 @@ async function currentTimeMs(client: PoolClient, supplied?: number): Promise<num
 
 async function ensurePlayer(client: PoolClient, ownerDid: string, nowMs: number): Promise<string> {
   const activeAfterMs = nowMs - ONLINE_WINDOW_MS;
+  await client.query(
+    "SELECT pg_advisory_xact_lock(hashtextextended($1, 734011))",
+    [ownerDid],
+  );
   let current = await client.query<{ field_id: string; updated_at: Date }>(
-    "SELECT field_id, updated_at FROM farm_players WHERE owner_did=$1 FOR UPDATE",
+    "SELECT field_id, updated_at FROM farm_players WHERE owner_did=$1",
     [ownerDid],
   );
   if (current.rows[0]?.updated_at.getTime() >= activeAfterMs) {
-    return current.rows[0].field_id;
+    const fieldId = current.rows[0].field_id;
+    await lockField(client, fieldId);
+    await client.query(
+      "SELECT owner_did FROM farm_players WHERE owner_did=$1 FOR UPDATE",
+      [ownerDid],
+    );
+    return fieldId;
   }
 
   // Serialize matchmaking so a burst of arrivals packs into one field.
   await client.query("SELECT pg_advisory_xact_lock(734009)");
   current = await client.query<{ field_id: string; updated_at: Date }>(
-    "SELECT field_id, updated_at FROM farm_players WHERE owner_did=$1 FOR UPDATE",
+    "SELECT field_id, updated_at FROM farm_players WHERE owner_did=$1",
     [ownerDid],
   );
   if (current.rows[0]?.updated_at.getTime() >= activeAfterMs) {
-    return current.rows[0].field_id;
+    const fieldId = current.rows[0].field_id;
+    await lockField(client, fieldId);
+    await client.query(
+      "SELECT owner_did FROM farm_players WHERE owner_did=$1 FOR UPDATE",
+      [ownerDid],
+    );
+    return fieldId;
   }
 
   const available = await client.query<{ field_id: string }>(
@@ -696,7 +712,6 @@ export async function syncFarm(pool: Pool, ownerDid: string, suppliedNowMs?: num
       return readSnapshot(client, ownerDid, existing.rows[0].field_id, nowMs);
     }
     const fieldId = await ensurePlayer(client, ownerDid, nowMs);
-    await lockField(client, fieldId);
     await ensureAchievementProgress(client, ownerDid);
     await client.query(
       `UPDATE farm_players
@@ -731,7 +746,6 @@ export async function actOnFarm(
   return transaction(pool, async client => {
     const nowMs = await currentTimeMs(client, suppliedNowMs);
     const fieldId = await ensurePlayer(client, ownerDid, nowMs);
-    await lockField(client, fieldId);
     if (action.type === "bite" || action.type === "fart") {
       await client.query("SELECT pg_advisory_xact_lock(734008)");
     }
