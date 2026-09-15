@@ -727,11 +727,11 @@ export async function actOnFarm(
   if (controls.readOnly) throw new ReadOnlyError("Slop Hogs is temporarily read-only");
   return transaction(pool, async client => {
     const nowMs = await currentTimeMs(client, suppliedNowMs);
+    const fieldId = await ensurePlayer(client, ownerDid, nowMs);
+    await lockField(client, fieldId);
     if (action.type === "bite" || action.type === "fart") {
       await client.query("SELECT pg_advisory_xact_lock(734008)");
     }
-    const fieldId = await ensurePlayer(client, ownerDid, nowMs);
-    await lockField(client, fieldId);
     await ensureRoundStarted(client, fieldId, nowMs);
     await ensureAchievementProgress(client, ownerDid);
     const selected = await client.query<ActionPlayerRow>(
