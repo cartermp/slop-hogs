@@ -449,7 +449,7 @@ async function ensureRoundStarted(client: PoolClient, fieldId: string, nowMs: nu
             FROM farm_players
            WHERE field_id=$1
              AND status='alive'
-             AND updated_at >= to_timestamp(($2 - $3) / 1000.0)
+             AND updated_at >= to_timestamp(($2::double precision - $3::double precision) / 1000.0)
         ) >= 2`,
     [fieldId, nowMs, ONLINE_WINDOW_MS],
   );
@@ -498,7 +498,7 @@ async function finishRoundIfWon(
        JOIN accounts account ON account.did=player.owner_did
       WHERE player.field_id=$1
         AND player.status='alive'
-        AND player.updated_at >= to_timestamp(($2 - $3) / 1000.0)
+        AND player.updated_at >= to_timestamp(($2::double precision - $3::double precision) / 1000.0)
       FOR UPDATE OF player`,
     [fieldId, nowMs, ONLINE_WINDOW_MS],
   );
@@ -573,7 +573,10 @@ async function resetFinishedRound(
     `SELECT owner_did
        FROM farm_players
       WHERE field_id=$1
-        AND (owner_did=$2 OR updated_at >= to_timestamp(($3 - $4) / 1000.0))
+        AND (
+          owner_did=$2
+          OR updated_at >= to_timestamp(($3::double precision - $4::double precision) / 1000.0)
+        )
       FOR UPDATE`,
     [fieldId, ownerDid, nowMs, ONLINE_WINDOW_MS],
   );
