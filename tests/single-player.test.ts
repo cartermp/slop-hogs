@@ -8,6 +8,7 @@ import {
   recordSinglePlayerVictory,
 } from "../src/lib/single-player-achievements.ts";
 import {
+  SINGLE_PLAYER_BARRIERS,
   SINGLE_PLAYER_DIFFICULTY,
   advanceSinglePlayerState,
   applySinglePlayerAction,
@@ -144,6 +145,54 @@ test("CPU hogs fight each other while a hunter pressures the player", () => {
   assert.ok(result.events.some(event => event.type === "bot_battle"));
   assert.ok(result.state.player.health < 100);
   assert.ok(result.state.bots.some(bot => bot.health < SINGLE_PLAYER_DIFFICULTY.easy.botHealth));
+});
+
+test("medium keeps one stable hunter on the player", () => {
+  const state = createSinglePlayerState("medium", NOW, 34);
+  for (const combatant of [state.player, ...state.bots]) {
+    combatant.x = 480;
+    combatant.y = 288;
+  }
+
+  const result = advanceSinglePlayerState(state, NOW + SINGLE_PLAYER_DIFFICULTY.medium.botThinkMs);
+  assert.equal(result.events.filter(event => event.type === "bot_attack").length, 1);
+  assert.ok(result.events.some(event => event.type === "bot_battle"));
+});
+
+test("solo barriers stop player movement and steer CPU hogs around cover", () => {
+  const barrier = SINGLE_PLAYER_BARRIERS[0];
+  const state = createSinglePlayerState("medium", NOW, 35);
+  const radius = 15;
+  state.player.x = barrier.x - radius - 1;
+  state.player.y = barrier.y + barrier.height / 2;
+  state.player.lastMovedAtMs = NOW;
+  const blocked = applySinglePlayerAction(state, { type: "move", dx: 1, dy: 0 }, NOW + 240);
+  assert.equal(blocked.state.player.x, state.player.x);
+
+  const botState = createSinglePlayerState("medium", NOW, 36);
+  botState.player.x = barrier.x - 100;
+  botState.player.y = barrier.y + barrier.height / 2;
+  botState.bots[0].x = barrier.x + barrier.width + radius + 1;
+  botState.bots[0].y = botState.player.y;
+  const steered = advanceSinglePlayerState(
+    botState,
+    NOW + SINGLE_PLAYER_DIFFICULTY.medium.botThinkMs,
+  );
+  assert.notEqual(steered.state.bots[0].y, botState.bots[0].y);
+  assert.ok(steered.state.bots[0].x >= barrier.x + barrier.width + radius);
+});
+
+test("solo slop never spawns inside barriers", () => {
+  for (let seed = 1; seed <= 40; seed += 1) {
+    const state = createSinglePlayerState("medium", NOW, seed);
+    for (const item of state.slop) {
+      assert.ok(SINGLE_PLAYER_BARRIERS.every(barrier => {
+        const nearestX = Math.max(barrier.x, Math.min(barrier.x + barrier.width, item.x));
+        const nearestY = Math.max(barrier.y, Math.min(barrier.y + barrier.height, item.y));
+        return Math.hypot(item.x - nearestX, item.y - nearestY) >= 22;
+      }));
+    }
+  }
 });
 
 test("CPU hogs earn a knockout rush for defeating each other", () => {
