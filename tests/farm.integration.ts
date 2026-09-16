@@ -3,6 +3,7 @@ import { randomUUID } from "node:crypto";
 import { test } from "node:test";
 import { createDatabase } from "../src/lib/server/database.ts";
 import { actOnFarm, syncFarm } from "../src/lib/server/farm.ts";
+import { MULTIPLAYER_LOBBY_WINDOW_MS } from "../src/lib/farm-game.ts";
 import { actOnSinglePlayer, syncSinglePlayer } from "../src/lib/server/single-player.ts";
 import { provisionHog } from "../src/lib/server/hogs.ts";
 import { migrate } from "../src/lib/server/migrations.ts";
@@ -25,6 +26,11 @@ test("the shared farm persists players, claims slop once, pops, and restarts", a
       (await syncFarm(pool, dids[0], now + 2)).players.find(player => player.isYou)?.name,
       "phillipcarter.dev",
     );
+    now += MULTIPLAYER_LOBBY_WINDOW_MS / 2;
+    await Promise.all(dids.map(did => syncFarm(pool, did, now)));
+    now += MULTIPLAYER_LOBBY_WINDOW_MS / 2 + 2;
+    await Promise.all(dids.map(did => syncFarm(pool, did, now)));
+    assert.equal((await syncFarm(pool, dids[0], now + 1)).multiplayer.status, "playing");
 
     const first = joined.players.find(player => !player.isYou)!;
     await pool.query("DELETE FROM farm_slop");
@@ -255,7 +261,7 @@ test("the shared farm persists players, claims slop once, pops, and restarts", a
   }
 });
 
-test("concurrent arrivals join the same available field", async () => {
+test("concurrent arrivals refresh the rolling lobby and active rounds reject new players", async () => {
   assert.ok(process.env.TEST_DATABASE_URL, "Set TEST_DATABASE_URL to a disposable PostgreSQL database");
   const pool = createDatabase(process.env.TEST_DATABASE_URL);
   const dids = Array.from({ length: 9 }, () => `did:plc:test${randomUUID().replaceAll("-", "")}`);
@@ -267,9 +273,28 @@ test("concurrent arrivals join the same available field", async () => {
     for (const did of dids.slice(0, 4)) {
       await syncFarm(pool, did, now++);
     }
+    const previousLobbyClose = now - 1 + MULTIPLAYER_LOBBY_WINDOW_MS;
+    now += 15_000;
     await Promise.all(dids.slice(4, 7).map(did => syncFarm(pool, did, now)));
     const friends = await Promise.all(dids.slice(4, 7).map(did => syncFarm(pool, did, now + 1)));
     assert.ok(friends.every(snapshot => snapshot.players.length === 7));
+    assert.ok(friends.every(snapshot => snapshot.multiplayer.status === "waiting"));
+    assert.ok(friends.every(
+      snapshot => snapshot.multiplayer.lobbyClosesAtMs === now + MULTIPLAYER_LOBBY_WINDOW_MS,
+    ));
+    await Promise.all(dids.slice(0, 7).map(did => syncFarm(pool, did, previousLobbyClose)));
+    assert.equal(
+      (await syncFarm(pool, dids[0], previousLobbyClose + 1)).multiplayer.status,
+      "waiting",
+      "new arrivals refresh the lobby window",
+    );
+    await Promise.all(
+      dids.slice(0, 7).map(did => syncFarm(pool, did, now + MULTIPLAYER_LOBBY_WINDOW_MS)),
+    );
+    assert.equal(
+      (await syncFarm(pool, dids[0], now + MULTIPLAYER_LOBBY_WINDOW_MS + 1)).multiplayer.status,
+      "playing",
+    );
 
     const firstField = await pool.query<{ field_id: string }>(
       "SELECT DISTINCT field_id FROM farm_players WHERE owner_did=ANY($1)",
@@ -277,7 +302,9 @@ test("concurrent arrivals join the same available field", async () => {
     );
     assert.equal(firstField.rowCount, 1, "the existing hogs and concurrent arrivals share one field");
 
-    await Promise.all(dids.slice(7).map(did => syncFarm(pool, did, now + 1)));
+    await Promise.all(
+      dids.slice(7).map(did => syncFarm(pool, did, now + MULTIPLAYER_LOBBY_WINDOW_MS + 1)),
+    );
     const assignments = await pool.query<{ field_id: string; count: string }>(
       `SELECT field_id, count(*)::text AS count
          FROM farm_players
@@ -286,13 +313,23 @@ test("concurrent arrivals join the same available field", async () => {
         ORDER BY count(*) DESC`,
       [dids],
     );
-    assert.deepEqual(assignments.rows.map(row => Number(row.count)), [8, 1]);
-    assert.equal((await syncFarm(pool, dids[0], now + 2)).players.length, 8);
-    const singleton = await pool.query<{ owner_did: string }>(
-      "SELECT owner_did FROM farm_players WHERE field_id=$1",
-      [assignments.rows.find(row => Number(row.count) === 1)!.field_id],
+    assert.deepEqual(assignments.rows.map(row => Number(row.count)), [7, 2]);
+    assert.equal(
+      (await syncFarm(pool, dids[0], now + MULTIPLAYER_LOBBY_WINDOW_MS + 2)).players.length,
+      7,
     );
-    assert.equal((await syncFarm(pool, singleton.rows[0].owner_did, now + 2)).players.length, 1);
+    const newLobby = await pool.query<{ owner_did: string }>(
+      `SELECT owner_did
+         FROM farm_players
+        WHERE field_id=$1
+        ORDER BY owner_did`,
+      [assignments.rows.find(row => Number(row.count) === 2)!.field_id],
+    );
+    assert.equal(
+      (await syncFarm(pool, newLobby.rows[0].owner_did, now + MULTIPLAYER_LOBBY_WINDOW_MS + 2))
+        .players.length,
+      2,
+    );
   } finally {
     await pool.query("DELETE FROM farm_slop WHERE field_id IN (SELECT field_id FROM farm_players WHERE owner_did=ANY($1))", [dids]);
     await pool.query("DELETE FROM app_sessions WHERE owner_did=ANY($1)", [dids]);

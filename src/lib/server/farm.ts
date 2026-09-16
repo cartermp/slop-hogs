@@ -15,6 +15,7 @@ import {
 import {
   KNOCKOUT_RUSH_DURATION_MS,
   MAX_HEALTH,
+  MULTIPLAYER_LOBBY_WINDOW_MS,
   ONLINE_WINDOW_MS,
   SLOP_KINDS,
   STARTING_MASS,
@@ -111,6 +112,7 @@ interface AchievementProgressRow {
 
 interface FieldRoundRow {
   round_number: number;
+  last_joined_at: Date;
   round_started_at: Date | null;
   round_finished_at: Date | null;
   winner_owner_did: string | null;
@@ -176,7 +178,8 @@ async function ensurePlayer(client: PoolClient, ownerDid: string, nowMs: number)
     `SELECT field.id AS field_id
        FROM farm_fields field
        JOIN farm_players player ON player.field_id=field.id
-       WHERE field.round_finished_at IS NULL
+       WHERE field.round_started_at IS NULL
+         AND field.round_finished_at IS NULL
          AND player.updated_at >= to_timestamp($1 / 1000.0)
          AND player.owner_did<>$2
       GROUP BY field.id, field.last_joined_at
@@ -187,17 +190,28 @@ async function ensurePlayer(client: PoolClient, ownerDid: string, nowMs: number)
   );
   let fieldId = available.rows[0]?.field_id ?? randomUUID();
   if (!available.rowCount) {
-    await client.query("INSERT INTO farm_fields(id) VALUES ($1)", [fieldId]);
+    await client.query(
+      `INSERT INTO farm_fields(id, created_at, last_joined_at)
+       VALUES ($1,to_timestamp($2 / 1000.0),to_timestamp($2 / 1000.0))`,
+      [fieldId, nowMs],
+    );
     await lockField(client, fieldId);
   } else {
     await lockField(client, fieldId);
-    const selectedField = await client.query<{ round_finished_at: Date | null }>(
-      "SELECT round_finished_at FROM farm_fields WHERE id=$1",
+    const selectedField = await client.query<{
+      round_started_at: Date | null;
+      round_finished_at: Date | null;
+    }>(
+      "SELECT round_started_at, round_finished_at FROM farm_fields WHERE id=$1",
       [fieldId],
     );
-    if (selectedField.rows[0]?.round_finished_at) {
+    if (selectedField.rows[0]?.round_started_at || selectedField.rows[0]?.round_finished_at) {
       fieldId = randomUUID();
-      await client.query("INSERT INTO farm_fields(id) VALUES ($1)", [fieldId]);
+      await client.query(
+        `INSERT INTO farm_fields(id, created_at, last_joined_at)
+         VALUES ($1,to_timestamp($2 / 1000.0),to_timestamp($2 / 1000.0))`,
+        [fieldId, nowMs],
+      );
       await lockField(client, fieldId);
     }
   }
@@ -211,8 +225,10 @@ async function ensurePlayer(client: PoolClient, ownerDid: string, nowMs: number)
     [ownerDid, fieldId, spawn.x, spawn.y, nowMs],
   );
   await client.query(
-    "UPDATE farm_fields SET last_joined_at=clock_timestamp() WHERE id=$1",
-    [fieldId],
+    `UPDATE farm_fields
+        SET last_joined_at=GREATEST(last_joined_at, to_timestamp($2 / 1000.0))
+      WHERE id=$1`,
+    [fieldId, nowMs],
   );
   return fieldId;
 }
@@ -461,19 +477,30 @@ async function ensureRoundStarted(client: PoolClient, fieldId: string, nowMs: nu
         AND round_started_at IS NULL
         AND round_finished_at IS NULL
         AND (
+          last_joined_at <= to_timestamp(($2::double precision - $4::double precision) / 1000.0)
+          OR (
+            SELECT count(*)
+              FROM farm_players
+             WHERE field_id=$1
+               AND status='alive'
+               AND updated_at >= to_timestamp(($2::double precision - $3::double precision) / 1000.0)
+          ) >= $5
+        )
+        AND (
           SELECT count(*)
             FROM farm_players
            WHERE field_id=$1
              AND status='alive'
              AND updated_at >= to_timestamp(($2::double precision - $3::double precision) / 1000.0)
         ) >= 2`,
-    [fieldId, nowMs, ONLINE_WINDOW_MS],
+    [fieldId, nowMs, ONLINE_WINDOW_MS, MULTIPLAYER_LOBBY_WINDOW_MS, FIELD_CAPACITY],
   );
 }
 
 async function readRound(client: PoolClient, fieldId: string): Promise<FieldRoundRow> {
   const result = await client.query<FieldRoundRow>(
-    `SELECT field.round_number, field.round_started_at, field.round_finished_at,
+    `SELECT field.round_number, field.last_joined_at,
+            field.round_started_at, field.round_finished_at,
             field.winner_owner_did, winner.player_id AS winner_player_id,
             account.handle AS winner_handle
        FROM farm_fields field
@@ -687,6 +714,9 @@ async function readSnapshot(
     multiplayer: {
       status: round.round_finished_at ? "finished"
         : round.round_started_at ? "playing" : "waiting",
+      lobbyClosesAtMs: round.round_started_at || round.round_finished_at
+        ? null
+        : round.last_joined_at.getTime() + MULTIPLAYER_LOBBY_WINDOW_MS,
       winnerId: round.winner_player_id,
       winnerName: round.winner_owner_did
         ? round.winner_handle ?? round.winner_owner_did
@@ -801,6 +831,10 @@ export async function actOnFarm(
         restarted: true,
       });
     } else if (action.type === "bite" || action.type === "fart") {
+      const round = await readRound(client, fieldId);
+      if (!round.round_started_at || round.round_finished_at) {
+        throw new Error("Wait for the lobby to close before battling");
+      }
       if (row.status !== "alive") throw new Error("Only living hogs can battle");
       if (
         row.last_attack_at
