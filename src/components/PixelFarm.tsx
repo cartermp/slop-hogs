@@ -797,31 +797,37 @@ export function PixelFarm({ canShareToBluesky }: { canShareToBluesky: boolean })
 
         <div className="console-footer">
           <div className="game-message" aria-live="polite">
-            <span>BATTLE FEED:</span> {error ? `ERROR: ${error}` : notice}
+            <span>BATTLE FEED</span>
+            <strong>{error ? `ERROR: ${error}` : notice}</strong>
           </div>
           <div className="battle-controls" aria-label="Battle controls">
-            <span>TARGET: {selectedTarget?.name ?? "NO HOG"}</span>
+            <span className="battle-target">
+              <small>TARGET</small>
+              {selectedTarget?.name ?? "NO HOG"}
+            </span>
             <button
               type="button"
               title="Press 1: heavy hit; adds 7 psychosis"
+              aria-label="Bite: heavy hit, adds 7 psychosis"
               aria-keyshortcuts="1"
               onClick={() => attack("bite")}
               disabled={!canBite || requestInFlight.current}
             >
-              [ 1 BITE +7 PSI ]
+              [ 1 BITE ]
             </button>
             <button
               type="button"
               title="Press 2: always releases up to 10 psychosis; also hits a target in range"
+              aria-label="Fart: releases up to 10 psychosis and hits a target in range"
               aria-keyshortcuts="2"
               onClick={() => attack("fart")}
               disabled={!ownHog || ownHog.status !== "alive" || requestInFlight.current}
             >
-              [ 2 FART -10 PSI ]
+              [ 2 FART ]
             </button>
           </div>
           <div className="controls-copy">
-            <span>MOVE</span> WASD / ARROWS // <span>ATTACK</span> 1 / 2
+            <span>MOVE</span> WASD / ARROWS <i aria-hidden="true">·</i> <span>ATTACK</span> 1 / 2
           </div>
           <div className="d-pad" aria-label="Touch movement controls">
             <button
