@@ -5,6 +5,7 @@ import { AchievementCabinet } from "@/components/AchievementCabinet";
 import { FeedbackLinks } from "@/components/FeedbackLinks";
 import { SinglePlayerAchievementCabinet } from "@/components/SinglePlayerAchievementCabinet";
 import { ACHIEVEMENT_BY_ID } from "@/lib/achievements";
+import { battleOutcomeMessage } from "@/lib/battle-messages";
 import {
   FARM_HEIGHT,
   FARM_WIDTH,
@@ -719,6 +720,12 @@ export function PixelFarm({ canShareToBluesky }: { canShareToBluesky: boolean })
                     ? <>SLOP HOG POPPED<br />DUE TO AI PSYCHOSIS</>
                     : <>SLOP HOG DEFEATED<br />IN BATTLE</>}
                 </h2>
+                <strong className="outcome-punchline">
+                  {battleOutcomeMessage(
+                    ownHog.status === "popped" ? "psychosis" : "defeat",
+                    ownHog.updatedAtMs,
+                  )}
+                </strong>
                 <div>
                   FINAL SCORE: {String(ownHog.score).padStart(6, "0")}<br />
                   KNOCKOUTS: {ownHog.knockouts}
@@ -749,7 +756,9 @@ export function PixelFarm({ canShareToBluesky }: { canShareToBluesky: boolean })
                 </div>
                 <p>*** THE FARM HAS BEEN RATIOED ***</p>
                 <h2 id="multiplayer-victory-title">YOU ARE THE LAST<br />HOG STANDING</h2>
-                <strong className="victory-punchline">ALL OTHER BACON HAS BEEN DEPLATFORMED.</strong>
+                <strong className="outcome-punchline">
+                  {battleOutcomeMessage("victory", ownHog.updatedAtMs)}
+                </strong>
                 <div>
                   FINAL SCORE: {String(ownHog.score).padStart(6, "0")}<br />
                   KNOCKOUTS: {ownHog.knockouts}<br />
@@ -767,6 +776,9 @@ export function PixelFarm({ canShareToBluesky }: { canShareToBluesky: boolean })
               <div className="pop-overlay victory-overlay" role="dialog" aria-modal="true" aria-labelledby="victory-title">
                 <p>*** ARENA CLEARED ***</p>
                 <h2 id="victory-title">YOU ARE THE LAST<br />HOG STANDING</h2>
+                <strong className="outcome-punchline">
+                  {battleOutcomeMessage("victory", ownHog.updatedAtMs)}
+                </strong>
                 <div>
                   DIFFICULTY: {singlePlayer.difficulty.toUpperCase()}<br />
                   FINAL SCORE: {String(ownHog.score).padStart(6, "0")}<br />
