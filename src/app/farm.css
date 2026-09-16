@@ -825,30 +825,64 @@
 
 .console-footer {
   display: grid;
-  grid-template-columns: 1fr auto auto auto;
+  grid-template-columns: minmax(0, 1fr) auto;
   align-items: center;
-  gap: 20px;
+  gap: 10px 18px;
   min-height: 58px;
   border-top: 5px solid #151019;
-  padding: 9px 14px;
+  padding: 10px 14px 12px;
   background: #342333;
   font: 20px var(--terminal);
 }
-.game-message { min-width: 0; overflow-wrap: anywhere; }
+.game-message {
+  display: grid;
+  grid-column: 1 / -1;
+  grid-template-columns: auto minmax(0, 1fr);
+  align-items: baseline;
+  gap: 10px;
+  min-width: 0;
+  border-bottom: 2px solid rgb(238 118 155 / .25);
+  padding-bottom: 9px;
+}
+.game-message span {
+  font: 7px var(--pixel);
+  white-space: nowrap;
+}
+.game-message strong {
+  min-width: 0;
+  overflow-wrap: anywhere;
+  color: #f6e5b6;
+  font-weight: 400;
+}
 .game-message span,
 .controls-copy span { color: #ee769b; }
-.controls-copy { white-space: nowrap; }
+.controls-copy {
+  color: #cdb9ca;
+  font-size: 16px;
+  white-space: nowrap;
+}
+.controls-copy i {
+  padding-inline: 5px;
+  color: #73546e;
+  font-style: normal;
+}
 .battle-controls {
   display: flex;
   align-items: center;
-  gap: 7px;
+  gap: 9px;
   white-space: nowrap;
 }
-.battle-controls span {
+.battle-target {
+  display: grid;
+  gap: 1px;
   max-width: 150px;
   overflow: hidden;
   color: #ffe68b;
   text-overflow: ellipsis;
+}
+.battle-target small {
+  color: #b796ad;
+  font: 6px var(--pixel);
 }
 .battle-controls button {
   border: 2px solid #130e14;
@@ -1323,11 +1357,11 @@
   .hud-stat, .mass-meter { padding: 8px; }
   .farm-viewport { overflow-x: auto; }
   .farm-world { width: 820px; }
-  .console-footer { grid-template-columns: 1fr auto; gap: 8px; }
+  .console-footer { grid-template-columns: 1fr; gap: 10px; }
   .battle-controls { grid-column: 1 / -1; justify-content: space-between; }
   .battle-controls span { max-width: none; }
   .controls-copy { display: none; }
-  .d-pad { display: grid; }
+  .d-pad { display: grid; justify-self: center; }
   .game-message { font-size: 16px; }
   .terminal-auth .login-row { align-items: flex-start; }
   .terminal-auth .handle-combobox { width: 100%; }
