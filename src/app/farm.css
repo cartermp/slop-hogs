@@ -430,6 +430,38 @@
 .fence-top { top: 1.5%; }
 .fence-bottom { bottom: 1.5%; }
 
+.solo-barrier {
+  position: absolute;
+  border: 4px solid #31542f;
+  background:
+    repeating-linear-gradient(0deg, #52783d 0 14px, #6f9848 14px 23px, #405f35 23px 29px);
+  box-shadow: inset 5px 0 0 rgb(188 220 92 / .32), 6px 7px 0 rgb(36 53 34 / .3);
+  pointer-events: none;
+}
+.solo-barrier::before,
+.solo-barrier::after {
+  position: absolute;
+  left: -8px;
+  width: calc(100% + 16px);
+  height: 7px;
+  border-block: 2px solid #74543d;
+  content: "";
+  background: #d3b678;
+}
+.solo-barrier::before { top: 18%; }
+.solo-barrier::after { bottom: 18%; }
+.solo-barrier i {
+  position: absolute;
+  z-index: 1;
+  left: 50%;
+  width: 8px;
+  height: 18%;
+  transform: translateX(-50%);
+  background: #9b7049;
+}
+.solo-barrier i:first-child { top: 0; }
+.solo-barrier i:last-child { bottom: 0; }
+
 .farm-player {
   position: absolute;
   transform: translate(-50%, -50%);

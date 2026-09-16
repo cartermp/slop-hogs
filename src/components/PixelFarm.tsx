@@ -25,6 +25,7 @@ import {
 } from "@/lib/farm-game";
 import { SINGLE_PLAYER_ACHIEVEMENT_BY_ID } from "@/lib/single-player-achievements";
 import {
+  SINGLE_PLAYER_BARRIERS,
   SINGLE_PLAYER_DIFFICULTIES,
   SINGLE_PLAYER_DIFFICULTY,
   type SinglePlayerAction,
@@ -688,6 +689,22 @@ export function PixelFarm({ canShareToBluesky }: { canShareToBluesky: boolean })
             <div className="hay-bale hay-two" aria-hidden="true" />
             <div className="farm-fence fence-top" aria-hidden="true" />
             <div className="farm-fence fence-bottom" aria-hidden="true" />
+            {mode === "single" && SINGLE_PLAYER_BARRIERS.map(barrier => (
+              <div
+                className="solo-barrier"
+                key={barrier.id}
+                style={{
+                  left: `${barrier.x / FARM_WIDTH * 100}%`,
+                  top: `${barrier.y / FARM_HEIGHT * 100}%`,
+                  width: `${barrier.width / FARM_WIDTH * 100}%`,
+                  height: `${barrier.height / FARM_HEIGHT * 100}%`,
+                  zIndex: Math.round(barrier.y + barrier.height),
+                }}
+                aria-hidden="true"
+              >
+                <i /><i />
+              </div>
+            ))}
 
             {snapshot?.slop.map(item => (
               <div

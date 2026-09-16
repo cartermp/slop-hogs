@@ -44,6 +44,19 @@ export interface SinglePlayerDifficultyDefinition {
   playerHunters: number;
 }
 
+export interface SinglePlayerBarrier {
+  id: string;
+  x: number;
+  y: number;
+  width: number;
+  height: number;
+}
+
+export const SINGLE_PLAYER_BARRIERS: readonly SinglePlayerBarrier[] = [
+  { id: "west-hedge", x: 350, y: 120, width: 36, height: 185 },
+  { id: "east-hedge", x: 570, y: 270, width: 36, height: 185 },
+] as const;
+
 export const SINGLE_PLAYER_DIFFICULTY: Record<SinglePlayerDifficulty, SinglePlayerDifficultyDefinition> = {
   easy: {
     label: "EASY",
@@ -58,14 +71,14 @@ export const SINGLE_PLAYER_DIFFICULTY: Record<SinglePlayerDifficulty, SinglePlay
   },
   medium: {
     label: "MEDIUM",
-    description: "3 mean hogs // 82 HP // two hunt you",
+    description: "3 mean hogs // 82 HP // one hunts you",
     botCount: 3,
     botHealth: 82,
     botDamage: 9,
     botSpeed: 48,
     botThinkMs: 1_100,
     activeSlop: 15,
-    playerHunters: 2,
+    playerHunters: 1,
   },
   hard: {
     label: "HARD",
@@ -248,17 +261,97 @@ function randomBetween(state: SinglePlayerState, minimum: number, maximum: numbe
   return minimum + fraction * (maximum - minimum);
 }
 
+function pointTouchesBarrier(
+  x: number,
+  y: number,
+  radius: number,
+  barrier: SinglePlayerBarrier,
+): boolean {
+  const nearestX = Math.max(barrier.x, Math.min(barrier.x + barrier.width, x));
+  const nearestY = Math.max(barrier.y, Math.min(barrier.y + barrier.height, y));
+  return Math.hypot(x - nearestX, y - nearestY) < radius;
+}
+
+function segmentCrossesBarrier(
+  fromX: number,
+  fromY: number,
+  toX: number,
+  toY: number,
+  radius: number,
+  barrier: SinglePlayerBarrier,
+): boolean {
+  if (pointTouchesBarrier(fromX, fromY, radius, barrier)) return false;
+  const minimumX = barrier.x - radius;
+  const maximumX = barrier.x + barrier.width + radius;
+  const minimumY = barrier.y - radius;
+  const maximumY = barrier.y + barrier.height + radius;
+  const dx = toX - fromX;
+  const dy = toY - fromY;
+  let entry = 0;
+  let exit = 1;
+
+  for (const [origin, delta, minimum, maximum] of [
+    [fromX, dx, minimumX, maximumX],
+    [fromY, dy, minimumY, maximumY],
+  ] as const) {
+    if (Math.abs(delta) < Number.EPSILON) {
+      if (origin < minimum || origin > maximum) return false;
+      continue;
+    }
+    const first = (minimum - origin) / delta;
+    const second = (maximum - origin) / delta;
+    entry = Math.max(entry, Math.min(first, second));
+    exit = Math.min(exit, Math.max(first, second));
+    if (entry > exit) return false;
+  }
+  return true;
+}
+
+function movementCrossesBarrier(
+  fromX: number,
+  fromY: number,
+  toX: number,
+  toY: number,
+  radius: number,
+): boolean {
+  return SINGLE_PLAYER_BARRIERS.some(barrier => (
+    segmentCrossesBarrier(fromX, fromY, toX, toY, radius, barrier)
+  ));
+}
+
+function resolveBarrierMovement<T extends { x: number; y: number; mass: number }>(
+  current: T,
+  desired: T,
+): T {
+  const radius = hogDiameter(current.mass) / 2;
+  if (!movementCrossesBarrier(current.x, current.y, desired.x, desired.y, radius)) return desired;
+  if (!movementCrossesBarrier(current.x, current.y, desired.x, current.y, radius)) {
+    return { ...desired, y: current.y };
+  }
+  if (!movementCrossesBarrier(current.x, current.y, current.x, desired.y, radius)) {
+    return { ...desired, x: current.x };
+  }
+  return { ...desired, x: current.x, y: current.y };
+}
+
 function spawnSlop(state: SinglePlayerState, nowMs: number): FarmSlop {
   const kindIndex = Math.floor(randomBetween(state, 0, SLOP_KINDS.length));
   const id = `solo-${state.startedAtMs}-${state.nextSlopId}`;
   state.nextSlopId += 1;
-  return {
-    id,
-    kind: SLOP_KINDS[Math.min(SLOP_KINDS.length - 1, kindIndex)],
-    x: randomBetween(state, 70, FARM_WIDTH - 70),
-    y: randomBetween(state, 70, FARM_HEIGHT - 70),
-    expiresAtMs: nowMs + SLOP_LIFETIME_MS,
-  };
+  for (let attempt = 0; attempt < 20; attempt += 1) {
+    const x = randomBetween(state, 70, FARM_WIDTH - 70);
+    const y = randomBetween(state, 70, FARM_HEIGHT - 70);
+    if (!SINGLE_PLAYER_BARRIERS.some(barrier => pointTouchesBarrier(x, y, 22, barrier))) {
+      return {
+        id,
+        kind: SLOP_KINDS[Math.min(SLOP_KINDS.length - 1, kindIndex)],
+        x,
+        y,
+        expiresAtMs: nowMs + SLOP_LIFETIME_MS,
+      };
+    }
+  }
+  throw new Error("Unable to place single-player slop");
 }
 
 function maintainSlop(state: SinglePlayerState, nowMs: number): void {
@@ -447,6 +540,35 @@ function clampCombatantPosition(combatant: SinglePlayerCombatant): void {
   combatant.y = Math.max(radius, Math.min(FARM_HEIGHT - radius, combatant.y));
 }
 
+function moveBotToward(
+  bot: SinglePlayerCombatant,
+  target: SinglePlayerCombatant,
+  distance: number,
+): { x: number; y: number } {
+  const angle = Math.atan2(target.y - bot.y, target.x - bot.x);
+  const turnDirection = Number(bot.id.slice(-1)) % 2 === 0 ? -1 : 1;
+  const offsets = [
+    0,
+    turnDirection * Math.PI / 4,
+    -turnDirection * Math.PI / 4,
+    turnDirection * Math.PI / 2,
+    -turnDirection * Math.PI / 2,
+    turnDirection * Math.PI * 3 / 4,
+    -turnDirection * Math.PI * 3 / 4,
+  ];
+  for (const offset of offsets) {
+    const desired = {
+      ...bot,
+      x: bot.x + Math.cos(angle + offset) * distance,
+      y: bot.y + Math.sin(angle + offset) * distance,
+    };
+    clampCombatantPosition(desired);
+    const moved = resolveBarrierMovement(bot, desired);
+    if (moved.x !== bot.x || moved.y !== bot.y) return moved;
+  }
+  return bot;
+}
+
 function advanceBots(state: SinglePlayerState, nowMs: number): SinglePlayerEvent[] {
   const events: SinglePlayerEvent[] = [];
   if (singlePlayerRunStatus(state) !== "playing") return events;
@@ -458,15 +580,11 @@ function advanceBots(state: SinglePlayerState, nowMs: number): SinglePlayerEvent
   for (let step = 0; step < steps && state.player.status === "alive"; step += 1) {
     const stepAt = firstStepAt + step * definition.botThinkMs;
     const livingBots = state.bots.filter(bot => bot.status === "alive");
-    const hunterIds = new Set<string>();
-    if (livingBots.length > 1) {
-      const firstHunter = Math.floor(randomBetween(state, 0, livingBots.length));
-      for (let index = 0; index < Math.min(definition.playerHunters, livingBots.length); index += 1) {
-        hunterIds.add(livingBots[(firstHunter + index) % livingBots.length].id);
-      }
-    } else if (livingBots[0]) {
-      hunterIds.add(livingBots[0].id);
-    }
+    const hunterIds = new Set(
+      livingBots
+        .slice(0, Math.min(definition.playerHunters, livingBots.length))
+        .map(bot => bot.id),
+    );
     const turnOrder = [...livingBots].sort(
       (left, right) => Number(hunterIds.has(right.id)) - Number(hunterIds.has(left.id)),
     );
@@ -488,12 +606,12 @@ function advanceBots(state: SinglePlayerState, nowMs: number): SinglePlayerEvent
         const rushSpeed = bot.knockoutRushExpiresAtMs !== null
           ? KNOCKOUT_RUSH_SPEED_MULTIPLIER
           : 1;
-        const ratio = Math.min(1, definition.botSpeed * rushSpeed / Math.max(1, beforeDistance));
-        const dx = (target.x - bot.x) * ratio;
-        const dy = (target.y - bot.y) * ratio;
-        bot.x += dx;
-        bot.y += dy;
-        clampCombatantPosition(bot);
+        const movementDistance = Math.min(definition.botSpeed * rushSpeed, beforeDistance);
+        const moved = moveBotToward(bot, target, movementDistance);
+        const dx = moved.x - bot.x;
+        const dy = moved.y - bot.y;
+        bot.x = moved.x;
+        bot.y = moved.y;
         if (Math.abs(dx) > 0.1) bot.facing = dx < 0 ? "left" : "right";
         bot.updatedAtMs = stepAt;
       }
@@ -549,7 +667,7 @@ function applyPlayerMovement(
   nowMs: number,
 ): FarmEvent[] {
   const player = state.player;
-  const moved = movePlayer({
+  const unconstrained = movePlayer({
     x: player.x,
     y: player.y,
     facing: player.facing,
@@ -560,6 +678,7 @@ function applyPlayerMovement(
     knockoutRushExpiresAtMs: player.knockoutRushExpiresAtMs,
     lastMovedAtMs: player.lastMovedAtMs,
   }, action, nowMs);
+  const moved = resolveBarrierMovement(player, unconstrained);
   const distance = Math.hypot(moved.x - player.x, moved.y - player.y);
   const movementElapsedMs = distance > 0
     ? Math.max(0, Math.min(240, nowMs - player.lastMovedAtMs))
