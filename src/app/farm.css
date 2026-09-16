@@ -285,7 +285,7 @@
 .farm-world::after,
 .login-screen::after {
   position: absolute;
-  z-index: 100;
+  z-index: 1100;
   inset: 0;
   pointer-events: none;
   content: "";
@@ -715,7 +715,7 @@
 
 .pop-overlay {
   position: absolute;
-  z-index: 50;
+  z-index: 1000;
   inset: 0;
   display: flex;
   align-items: center;
