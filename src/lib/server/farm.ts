@@ -112,7 +112,7 @@ interface AchievementProgressRow {
 
 interface FieldRoundRow {
   round_number: number;
-  last_joined_at: Date;
+  lobby_closes_at: Date | null;
   round_started_at: Date | null;
   round_finished_at: Date | null;
   winner_owner_did: string | null;
@@ -182,18 +182,27 @@ async function ensurePlayer(client: PoolClient, ownerDid: string, nowMs: number)
          AND field.round_finished_at IS NULL
          AND player.updated_at >= to_timestamp($1 / 1000.0)
          AND player.owner_did<>$2
-      GROUP BY field.id, field.last_joined_at
+       GROUP BY field.id, field.last_joined_at, field.lobby_closes_at
      HAVING count(*) < $3
-      ORDER BY field.last_joined_at DESC, field.id
-      LIMIT 1`,
-    [activeAfterMs, ownerDid, FIELD_CAPACITY],
+         AND (
+           field.lobby_closes_at > to_timestamp($4 / 1000.0)
+           OR count(*) < 2
+         )
+       ORDER BY field.last_joined_at DESC, field.id
+       LIMIT 1`,
+    [activeAfterMs, ownerDid, FIELD_CAPACITY, nowMs],
   );
   let fieldId = available.rows[0]?.field_id ?? randomUUID();
   if (!available.rowCount) {
     await client.query(
-      `INSERT INTO farm_fields(id, created_at, last_joined_at)
-       VALUES ($1,to_timestamp($2 / 1000.0),to_timestamp($2 / 1000.0))`,
-      [fieldId, nowMs],
+      `INSERT INTO farm_fields(id, created_at, last_joined_at, lobby_closes_at)
+       VALUES (
+         $1,
+         to_timestamp($2 / 1000.0),
+         to_timestamp($2 / 1000.0),
+         to_timestamp(($2::double precision + $3::double precision) / 1000.0)
+       )`,
+      [fieldId, nowMs, MULTIPLAYER_LOBBY_WINDOW_MS],
     );
     await lockField(client, fieldId);
   } else {
@@ -208,9 +217,14 @@ async function ensurePlayer(client: PoolClient, ownerDid: string, nowMs: number)
     if (selectedField.rows[0]?.round_started_at || selectedField.rows[0]?.round_finished_at) {
       fieldId = randomUUID();
       await client.query(
-        `INSERT INTO farm_fields(id, created_at, last_joined_at)
-         VALUES ($1,to_timestamp($2 / 1000.0),to_timestamp($2 / 1000.0))`,
-        [fieldId, nowMs],
+        `INSERT INTO farm_fields(id, created_at, last_joined_at, lobby_closes_at)
+         VALUES (
+           $1,
+           to_timestamp($2 / 1000.0),
+           to_timestamp($2 / 1000.0),
+           to_timestamp(($2::double precision + $3::double precision) / 1000.0)
+         )`,
+        [fieldId, nowMs, MULTIPLAYER_LOBBY_WINDOW_MS],
       );
       await lockField(client, fieldId);
     }
@@ -472,19 +486,20 @@ async function lockField(client: PoolClient, fieldId: string): Promise<void> {
 async function ensureRoundStarted(client: PoolClient, fieldId: string, nowMs: number): Promise<void> {
   await client.query(
     `UPDATE farm_fields
-        SET round_started_at=to_timestamp($2 / 1000.0)
+        SET round_started_at=to_timestamp($2 / 1000.0),
+            lobby_closes_at=NULL
       WHERE id=$1
         AND round_started_at IS NULL
         AND round_finished_at IS NULL
         AND (
-          last_joined_at <= to_timestamp(($2::double precision - $4::double precision) / 1000.0)
+          lobby_closes_at <= to_timestamp($2 / 1000.0)
           OR (
             SELECT count(*)
               FROM farm_players
              WHERE field_id=$1
                AND status='alive'
                AND updated_at >= to_timestamp(($2::double precision - $3::double precision) / 1000.0)
-          ) >= $5
+          ) >= $4
         )
         AND (
           SELECT count(*)
@@ -493,13 +508,13 @@ async function ensureRoundStarted(client: PoolClient, fieldId: string, nowMs: nu
              AND status='alive'
              AND updated_at >= to_timestamp(($2::double precision - $3::double precision) / 1000.0)
         ) >= 2`,
-    [fieldId, nowMs, ONLINE_WINDOW_MS, MULTIPLAYER_LOBBY_WINDOW_MS, FIELD_CAPACITY],
+    [fieldId, nowMs, ONLINE_WINDOW_MS, FIELD_CAPACITY],
   );
 }
 
 async function readRound(client: PoolClient, fieldId: string): Promise<FieldRoundRow> {
   const result = await client.query<FieldRoundRow>(
-    `SELECT field.round_number, field.last_joined_at,
+    `SELECT field.round_number, field.lobby_closes_at,
             field.round_started_at, field.round_finished_at,
             field.winner_owner_did, winner.player_id AS winner_player_id,
             account.handle AS winner_handle
@@ -664,11 +679,15 @@ async function resetFinishedRound(
   await client.query(
     `UPDATE farm_fields
         SET round_number=round_number+1,
-            round_started_at=CASE WHEN $3 >= 2 THEN to_timestamp($2 / 1000.0) ELSE NULL END,
+            round_started_at=CASE WHEN $3 >= $5 THEN to_timestamp($2 / 1000.0) ELSE NULL END,
             round_finished_at=NULL, winner_owner_did=NULL,
-            last_joined_at=to_timestamp($2 / 1000.0)
+            last_joined_at=to_timestamp($2 / 1000.0),
+            lobby_closes_at=CASE
+              WHEN $3 >= $5 THEN NULL
+              ELSE to_timestamp(($2::double precision + $4::double precision) / 1000.0)
+            END
       WHERE id=$1`,
-    [fieldId, nowMs, participants.rows.length],
+    [fieldId, nowMs, participants.rows.length, MULTIPLAYER_LOBBY_WINDOW_MS, FIELD_CAPACITY],
   );
 }
 
@@ -716,7 +735,7 @@ async function readSnapshot(
         : round.round_started_at ? "playing" : "waiting",
       lobbyClosesAtMs: round.round_started_at || round.round_finished_at
         ? null
-        : round.last_joined_at.getTime() + MULTIPLAYER_LOBBY_WINDOW_MS,
+        : round.lobby_closes_at?.getTime() ?? null,
       winnerId: round.winner_player_id,
       winnerName: round.winner_owner_did
         ? round.winner_handle ?? round.winner_owner_did

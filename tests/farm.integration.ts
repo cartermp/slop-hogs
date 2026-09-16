@@ -171,7 +171,7 @@ test("the shared farm persists players, claims slop once, pops, and restarts", a
       /Only the winning hog can reset the round/,
     );
     const resetByWinner = await actOnFarm(pool, dids[0], { type: "restart" }, now + 1);
-    assert.equal(resetByWinner.snapshot.multiplayer.status, "playing");
+    assert.equal(resetByWinner.snapshot.multiplayer.status, "waiting");
     assert.ok(resetByWinner.snapshot.players.every(player => player.status === "alive"));
     assert.ok(resetByWinner.snapshot.players.every(player => player.health === 100));
     assert.equal(resetByWinner.snapshot.achievements.progress.runs, 2);
@@ -183,6 +183,11 @@ test("the shared farm persists players, claims slop once, pops, and restarts", a
       )).rows[0].runs),
       2,
     );
+    const resetLobbyClosesAtMs = resetByWinner.snapshot.multiplayer.lobbyClosesAtMs!;
+    await Promise.all(dids.map(did => syncFarm(pool, did, resetLobbyClosesAtMs - 15_000)));
+    now = resetLobbyClosesAtMs;
+    await Promise.all(dids.map(did => syncFarm(pool, did, now)));
+    assert.equal((await syncFarm(pool, dids[0], now + 1)).multiplayer.status, "playing");
 
     await pool.query("DELETE FROM farm_slop");
     await pool.query(
@@ -250,7 +255,11 @@ test("the shared farm persists players, claims slop once, pops, and restarts", a
       "a draw does not register a victory",
     );
     const resetDraw = await actOnFarm(pool, dids[0], { type: "restart" }, now + 1);
-    assert.equal(resetDraw.snapshot.multiplayer.status, "playing");
+    assert.equal(resetDraw.snapshot.multiplayer.status, "waiting");
+    assert.equal(
+      resetDraw.snapshot.multiplayer.lobbyClosesAtMs,
+      now + 1 + MULTIPLAYER_LOBBY_WINDOW_MS,
+    );
     assert.ok(resetDraw.snapshot.players.every(player => player.status === "alive"));
   } finally {
     await pool.query("DELETE FROM farm_slop");
@@ -261,38 +270,39 @@ test("the shared farm persists players, claims slop once, pops, and restarts", a
   }
 });
 
-test("concurrent arrivals refresh the rolling lobby and active rounds reject new players", async () => {
+test("the lobby starts at capacity or its original deadline and active rounds reject new players", async () => {
   assert.ok(process.env.TEST_DATABASE_URL, "Set TEST_DATABASE_URL to a disposable PostgreSQL database");
   const pool = createDatabase(process.env.TEST_DATABASE_URL);
-  const dids = Array.from({ length: 9 }, () => `did:plc:test${randomUUID().replaceAll("-", "")}`);
+  const dids = Array.from({ length: 17 }, () => `did:plc:test${randomUUID().replaceAll("-", "")}`);
   let now = Date.now();
   try {
     await migrate(pool);
     await Promise.all(dids.map(did => provisionHog(pool, did)));
 
-    for (const did of dids.slice(0, 4)) {
-      await syncFarm(pool, did, now++);
-    }
-    const previousLobbyClose = now - 1 + MULTIPLAYER_LOBBY_WINDOW_MS;
+    const lobbyOpenedAtMs = now;
+    const firstLobby = await syncFarm(pool, dids[0], now++);
+    const lobbyClosesAtMs = firstLobby.multiplayer.lobbyClosesAtMs!;
+    assert.equal(lobbyClosesAtMs, lobbyOpenedAtMs + MULTIPLAYER_LOBBY_WINDOW_MS);
+    for (const did of dids.slice(1, 4)) await syncFarm(pool, did, now++);
     now += 15_000;
     await Promise.all(dids.slice(4, 7).map(did => syncFarm(pool, did, now)));
     const friends = await Promise.all(dids.slice(4, 7).map(did => syncFarm(pool, did, now + 1)));
     assert.ok(friends.every(snapshot => snapshot.players.length === 7));
     assert.ok(friends.every(snapshot => snapshot.multiplayer.status === "waiting"));
     assert.ok(friends.every(
-      snapshot => snapshot.multiplayer.lobbyClosesAtMs === now + MULTIPLAYER_LOBBY_WINDOW_MS,
+      snapshot => snapshot.multiplayer.lobbyClosesAtMs === lobbyClosesAtMs,
     ));
-    await Promise.all(dids.slice(0, 7).map(did => syncFarm(pool, did, previousLobbyClose)));
+    await Promise.all(dids.slice(0, 7).map(did => syncFarm(pool, did, lobbyClosesAtMs - 1)));
     assert.equal(
-      (await syncFarm(pool, dids[0], previousLobbyClose + 1)).multiplayer.status,
+      (await syncFarm(pool, dids[0], lobbyClosesAtMs - 1)).multiplayer.status,
       "waiting",
-      "new arrivals refresh the lobby window",
+      "new arrivals do not extend the lobby deadline",
     );
-    await Promise.all(
-      dids.slice(0, 7).map(did => syncFarm(pool, did, now + MULTIPLAYER_LOBBY_WINDOW_MS)),
-    );
+    const firstNewLobby = await syncFarm(pool, dids[7], lobbyClosesAtMs);
+    assert.equal(firstNewLobby.players.length, 1, "an expired lobby does not admit new arrivals");
+    await Promise.all(dids.slice(0, 7).map(did => syncFarm(pool, did, lobbyClosesAtMs + 1)));
     assert.equal(
-      (await syncFarm(pool, dids[0], now + MULTIPLAYER_LOBBY_WINDOW_MS + 1)).multiplayer.status,
+      (await syncFarm(pool, dids[0], lobbyClosesAtMs + 1)).multiplayer.status,
       "playing",
     );
 
@@ -302,9 +312,6 @@ test("concurrent arrivals refresh the rolling lobby and active rounds reject new
     );
     assert.equal(firstField.rowCount, 1, "the existing hogs and concurrent arrivals share one field");
 
-    await Promise.all(
-      dids.slice(7).map(did => syncFarm(pool, did, now + MULTIPLAYER_LOBBY_WINDOW_MS + 1)),
-    );
     const assignments = await pool.query<{ field_id: string; count: string }>(
       `SELECT field_id, count(*)::text AS count
          FROM farm_players
@@ -313,23 +320,26 @@ test("concurrent arrivals refresh the rolling lobby and active rounds reject new
         ORDER BY count(*) DESC`,
       [dids],
     );
-    assert.deepEqual(assignments.rows.map(row => Number(row.count)), [7, 2]);
+    assert.deepEqual(assignments.rows.map(row => Number(row.count)), [7, 1]);
     assert.equal(
-      (await syncFarm(pool, dids[0], now + MULTIPLAYER_LOBBY_WINDOW_MS + 2)).players.length,
+      (await syncFarm(pool, dids[0], lobbyClosesAtMs + 2)).players.length,
       7,
     );
-    const newLobby = await pool.query<{ owner_did: string }>(
-      `SELECT owner_did
-         FROM farm_players
-        WHERE field_id=$1
-        ORDER BY owner_did`,
-      [assignments.rows.find(row => Number(row.count) === 2)!.field_id],
-    );
+    const singletonClosesAtMs = firstNewLobby.multiplayer.lobbyClosesAtMs!;
+    await syncFarm(pool, dids[7], singletonClosesAtMs - 15_000);
+    const singletonMatch = await syncFarm(pool, dids[8], singletonClosesAtMs);
+    assert.equal(singletonMatch.players.length, 2);
     assert.equal(
-      (await syncFarm(pool, newLobby.rows[0].owner_did, now + MULTIPLAYER_LOBBY_WINDOW_MS + 2))
-        .players.length,
-      2,
+      singletonMatch.multiplayer.status,
+      "playing",
+      "an expired singleton admits a second player and starts immediately",
     );
+
+    await Promise.all(dids.slice(9).map(did => syncFarm(pool, did, singletonClosesAtMs + 1)));
+    const fullLobby = await syncFarm(pool, dids[9], singletonClosesAtMs + 2);
+    assert.equal(fullLobby.players.length, 8);
+    assert.equal(fullLobby.multiplayer.status, "playing", "a full lobby starts before its deadline");
+    assert.equal(fullLobby.multiplayer.lobbyClosesAtMs, null);
   } finally {
     await pool.query("DELETE FROM farm_slop WHERE field_id IN (SELECT field_id FROM farm_players WHERE owner_did=ANY($1))", [dids]);
     await pool.query("DELETE FROM app_sessions WHERE owner_did=ANY($1)", [dids]);
