@@ -36,10 +36,11 @@ test("the shared farm persists players, claims slop once, pops, and restarts", a
     await pool.query("DELETE FROM farm_slop");
     await pool.query(
       `INSERT INTO farm_slop(id, field_id, kind, x, y, expires_at)
-       SELECT $1, field_id, 'premium_tokens', $2, $3, clock_timestamp() + interval '1 minute'
+       SELECT $1, field_id, 'premium_tokens', $2, $3,
+              to_timestamp(($5::double precision + 60000) / 1000.0)
          FROM farm_players
         WHERE owner_did=$4`,
-      [randomUUID(), first.x, first.y, dids[0]],
+      [randomUUID(), first.x, first.y, dids[0], now],
     );
     now += 100;
     const ate = await actOnFarm(pool, dids[0], { type: "move", dx: 1, dy: 0 }, now);
@@ -85,10 +86,10 @@ test("the shared farm persists players, claims slop once, pops, and restarts", a
     await pool.query(
       `INSERT INTO farm_slop(id, field_id, kind, x, y, expires_at)
        SELECT $1, field_id, 'hallucinated_citation', 400, 300,
-              clock_timestamp() + interval '1 minute'
+              to_timestamp(($3::double precision + 60000) / 1000.0)
          FROM farm_players
         WHERE owner_did=$2`,
-      [randomUUID(), dids[0]],
+      [randomUUID(), dids[0], now],
     );
     now += 200;
     const race = await Promise.all(
@@ -201,10 +202,10 @@ test("the shared farm persists players, claims slop once, pops, and restarts", a
     await pool.query(
       `INSERT INTO farm_slop(id, field_id, kind, x, y, expires_at)
        SELECT $1, field_id, 'context_overflow', 400, 300,
-              clock_timestamp() + interval '1 minute'
+              to_timestamp(($3::double precision + 60000) / 1000.0)
          FROM farm_players
         WHERE owner_did=$2`,
-      [randomUUID(), dids[0]],
+      [randomUUID(), dids[0], now],
     );
     now += 200;
     const popped = await actOnFarm(pool, dids[0], { type: "move", dx: -1, dy: 0 }, now);
