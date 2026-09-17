@@ -227,6 +227,11 @@ test("the shared farm persists players, claims slop once, pops, and restarts", a
     assert.equal(fresh.status, "alive");
     assert.equal(fresh.mass, 24);
     assert.equal(fresh.score, 0);
+    const restartedLobbyClosesAtMs = restarted.snapshot.multiplayer.lobbyClosesAtMs!;
+    await Promise.all(dids.map(did => syncFarm(pool, did, restartedLobbyClosesAtMs - 15_000)));
+    now = restartedLobbyClosesAtMs;
+    await Promise.all(dids.map(did => syncFarm(pool, did, now)));
+    assert.equal((await syncFarm(pool, dids[0], now + 1)).multiplayer.status, "playing");
 
     await pool.query(
       `UPDATE farm_players
