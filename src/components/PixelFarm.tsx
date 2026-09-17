@@ -437,9 +437,12 @@ export function PixelFarm({ canShareToBluesky }: { canShareToBluesky: boolean })
   const ownHog = snapshot?.players.find(player => player.isYou) ?? null;
   const singlePlayer = snapshot && "singlePlayer" in snapshot ? snapshot.singlePlayer : null;
   const multiplayer = snapshot && "multiplayer" in snapshot ? snapshot.multiplayer : null;
+  const lobbySeconds = multiplayer?.status === "waiting" && multiplayer.lobbyClosesAtMs !== null
+    ? Math.max(0, Math.ceil((multiplayer.lobbyClosesAtMs - (snapshot?.serverNowMs ?? 0)) / 1_000))
+    : null;
   const runIsActive = mode === "single"
     ? singlePlayer?.status === "playing"
-    : multiplayer?.status !== "finished";
+    : multiplayer?.status === "playing";
   const isMultiplayerWinner = Boolean(
     mode === "multiplayer"
     && ownHog
@@ -646,7 +649,9 @@ export function PixelFarm({ canShareToBluesky }: { canShareToBluesky: boolean })
             <i className={mode === "single" ? "solo-dot" : "online-dot"} />
             {mode === "single"
               ? `${singlePlayer?.botsRemaining ?? "-"} CPU HOGS LEFT`
-              : `${snapshot?.players.filter(player => player.status === "alive").length ?? "-"} HOGS LEFT`}
+              : multiplayer?.status === "waiting"
+                ? `${snapshot?.players.length ?? "-"} HOGS LOADED // ${lobbySeconds ?? 30}S`
+                : `${snapshot?.players.filter(player => player.status === "alive").length ?? "-"} HOGS LEFT`}
           </span>
           <button type="button" className="mode-switch-button" onClick={chooseAnotherMode}>[ CHANGE MODE ]</button>
           <form action="/oauth/logout" method="post">
@@ -729,6 +734,13 @@ export function PixelFarm({ canShareToBluesky }: { canShareToBluesky: boolean })
             ))}
 
             {!snapshot && <div className="farm-loading">DIALING THE SLOP MAINFRAME...</div>}
+            {snapshot && mode === "multiplayer" && multiplayer?.status === "waiting" && (
+              <div className="farm-loading">
+                {snapshot.players.length < 2
+                  ? `LOBBY OPEN // ${snapshot.players.length} HOG LOADED`
+                  : `LOADING HOGS // BATTLE IN ${lobbySeconds ?? 0}S`}
+              </div>
+            )}
             {ownHog && ownHog.status !== "alive" && (
               <div className="pop-overlay" role="dialog" aria-modal="true" aria-labelledby="pop-title">
                 <p>!!! SYSTEM FAILURE !!!</p>

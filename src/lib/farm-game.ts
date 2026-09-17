@@ -6,6 +6,7 @@ export const STARTING_MASS = 24;
 export const POPPING_MASS = 100;
 export const MAX_HEALTH = 100;
 export const ONLINE_WINDOW_MS = 20_000;
+export const MULTIPLAYER_LOBBY_WINDOW_MS = 30_000;
 export const PSYCHOSIS_DECAY_INTERVAL_MS = 2_000;
 export const ATTACK_COOLDOWN_MS = 900;
 export const KNOCKOUT_RUSH_ATTACK_COOLDOWN_MS = 700;
@@ -136,6 +137,7 @@ export interface FarmSnapshot {
   achievements: AchievementState;
   multiplayer: {
     status: "waiting" | "playing" | "finished";
+    lobbyClosesAtMs: number | null;
     winnerId: string | null;
     winnerName: string | null;
   };

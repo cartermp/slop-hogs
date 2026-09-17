@@ -3,6 +3,7 @@ import { randomUUID } from "node:crypto";
 import { test } from "node:test";
 import { createDatabase } from "../src/lib/server/database.ts";
 import { actOnFarm, syncFarm } from "../src/lib/server/farm.ts";
+import { MULTIPLAYER_LOBBY_WINDOW_MS } from "../src/lib/farm-game.ts";
 import { actOnSinglePlayer, syncSinglePlayer } from "../src/lib/server/single-player.ts";
 import { provisionHog } from "../src/lib/server/hogs.ts";
 import { migrate } from "../src/lib/server/migrations.ts";
@@ -25,15 +26,21 @@ test("the shared farm persists players, claims slop once, pops, and restarts", a
       (await syncFarm(pool, dids[0], now + 2)).players.find(player => player.isYou)?.name,
       "phillipcarter.dev",
     );
+    now += MULTIPLAYER_LOBBY_WINDOW_MS / 2;
+    await Promise.all(dids.map(did => syncFarm(pool, did, now)));
+    now += MULTIPLAYER_LOBBY_WINDOW_MS / 2 + 2;
+    await Promise.all(dids.map(did => syncFarm(pool, did, now)));
+    assert.equal((await syncFarm(pool, dids[0], now + 1)).multiplayer.status, "playing");
 
     const first = joined.players.find(player => !player.isYou)!;
     await pool.query("DELETE FROM farm_slop");
     await pool.query(
       `INSERT INTO farm_slop(id, field_id, kind, x, y, expires_at)
-       SELECT $1, field_id, 'premium_tokens', $2, $3, clock_timestamp() + interval '1 minute'
+       SELECT $1, field_id, 'premium_tokens', $2, $3,
+              to_timestamp(($5::double precision + 60000) / 1000.0)
          FROM farm_players
         WHERE owner_did=$4`,
-      [randomUUID(), first.x, first.y, dids[0]],
+      [randomUUID(), first.x, first.y, dids[0], now],
     );
     now += 100;
     const ate = await actOnFarm(pool, dids[0], { type: "move", dx: 1, dy: 0 }, now);
@@ -79,10 +86,10 @@ test("the shared farm persists players, claims slop once, pops, and restarts", a
     await pool.query(
       `INSERT INTO farm_slop(id, field_id, kind, x, y, expires_at)
        SELECT $1, field_id, 'hallucinated_citation', 400, 300,
-              clock_timestamp() + interval '1 minute'
+              to_timestamp(($3::double precision + 60000) / 1000.0)
          FROM farm_players
         WHERE owner_did=$2`,
-      [randomUUID(), dids[0]],
+      [randomUUID(), dids[0], now],
     );
     now += 200;
     const race = await Promise.all(
@@ -165,7 +172,7 @@ test("the shared farm persists players, claims slop once, pops, and restarts", a
       /Only the winning hog can reset the round/,
     );
     const resetByWinner = await actOnFarm(pool, dids[0], { type: "restart" }, now + 1);
-    assert.equal(resetByWinner.snapshot.multiplayer.status, "playing");
+    assert.equal(resetByWinner.snapshot.multiplayer.status, "waiting");
     assert.ok(resetByWinner.snapshot.players.every(player => player.status === "alive"));
     assert.ok(resetByWinner.snapshot.players.every(player => player.health === 100));
     assert.equal(resetByWinner.snapshot.achievements.progress.runs, 2);
@@ -177,6 +184,11 @@ test("the shared farm persists players, claims slop once, pops, and restarts", a
       )).rows[0].runs),
       2,
     );
+    const resetLobbyClosesAtMs = resetByWinner.snapshot.multiplayer.lobbyClosesAtMs!;
+    await Promise.all(dids.map(did => syncFarm(pool, did, resetLobbyClosesAtMs - 15_000)));
+    now = resetLobbyClosesAtMs;
+    await Promise.all(dids.map(did => syncFarm(pool, did, now)));
+    assert.equal((await syncFarm(pool, dids[0], now + 1)).multiplayer.status, "playing");
 
     await pool.query("DELETE FROM farm_slop");
     await pool.query(
@@ -190,10 +202,10 @@ test("the shared farm persists players, claims slop once, pops, and restarts", a
     await pool.query(
       `INSERT INTO farm_slop(id, field_id, kind, x, y, expires_at)
        SELECT $1, field_id, 'context_overflow', 400, 300,
-              clock_timestamp() + interval '1 minute'
+              to_timestamp(($3::double precision + 60000) / 1000.0)
          FROM farm_players
         WHERE owner_did=$2`,
-      [randomUUID(), dids[0]],
+      [randomUUID(), dids[0], now],
     );
     now += 200;
     const popped = await actOnFarm(pool, dids[0], { type: "move", dx: -1, dy: 0 }, now);
@@ -215,6 +227,11 @@ test("the shared farm persists players, claims slop once, pops, and restarts", a
     assert.equal(fresh.status, "alive");
     assert.equal(fresh.mass, 24);
     assert.equal(fresh.score, 0);
+    const restartedLobbyClosesAtMs = restarted.snapshot.multiplayer.lobbyClosesAtMs!;
+    await Promise.all(dids.map(did => syncFarm(pool, did, restartedLobbyClosesAtMs - 15_000)));
+    now = restartedLobbyClosesAtMs;
+    await Promise.all(dids.map(did => syncFarm(pool, did, now)));
+    assert.equal((await syncFarm(pool, dids[0], now + 1)).multiplayer.status, "playing");
 
     await pool.query(
       `UPDATE farm_players
@@ -244,7 +261,11 @@ test("the shared farm persists players, claims slop once, pops, and restarts", a
       "a draw does not register a victory",
     );
     const resetDraw = await actOnFarm(pool, dids[0], { type: "restart" }, now + 1);
-    assert.equal(resetDraw.snapshot.multiplayer.status, "playing");
+    assert.equal(resetDraw.snapshot.multiplayer.status, "waiting");
+    assert.equal(
+      resetDraw.snapshot.multiplayer.lobbyClosesAtMs,
+      now + 1 + MULTIPLAYER_LOBBY_WINDOW_MS,
+    );
     assert.ok(resetDraw.snapshot.players.every(player => player.status === "alive"));
   } finally {
     await pool.query("DELETE FROM farm_slop");
@@ -255,21 +276,41 @@ test("the shared farm persists players, claims slop once, pops, and restarts", a
   }
 });
 
-test("concurrent arrivals join the same available field", async () => {
+test("the lobby starts at capacity or its original deadline and active rounds reject new players", async () => {
   assert.ok(process.env.TEST_DATABASE_URL, "Set TEST_DATABASE_URL to a disposable PostgreSQL database");
   const pool = createDatabase(process.env.TEST_DATABASE_URL);
-  const dids = Array.from({ length: 9 }, () => `did:plc:test${randomUUID().replaceAll("-", "")}`);
+  const dids = Array.from({ length: 17 }, () => `did:plc:test${randomUUID().replaceAll("-", "")}`);
   let now = Date.now();
   try {
     await migrate(pool);
     await Promise.all(dids.map(did => provisionHog(pool, did)));
 
-    for (const did of dids.slice(0, 4)) {
-      await syncFarm(pool, did, now++);
-    }
+    const lobbyOpenedAtMs = now;
+    const firstLobby = await syncFarm(pool, dids[0], now++);
+    const lobbyClosesAtMs = firstLobby.multiplayer.lobbyClosesAtMs!;
+    assert.equal(lobbyClosesAtMs, lobbyOpenedAtMs + MULTIPLAYER_LOBBY_WINDOW_MS);
+    for (const did of dids.slice(1, 4)) await syncFarm(pool, did, now++);
+    now += 15_000;
     await Promise.all(dids.slice(4, 7).map(did => syncFarm(pool, did, now)));
     const friends = await Promise.all(dids.slice(4, 7).map(did => syncFarm(pool, did, now + 1)));
     assert.ok(friends.every(snapshot => snapshot.players.length === 7));
+    assert.ok(friends.every(snapshot => snapshot.multiplayer.status === "waiting"));
+    assert.ok(friends.every(
+      snapshot => snapshot.multiplayer.lobbyClosesAtMs === lobbyClosesAtMs,
+    ));
+    await Promise.all(dids.slice(0, 7).map(did => syncFarm(pool, did, lobbyClosesAtMs - 1)));
+    assert.equal(
+      (await syncFarm(pool, dids[0], lobbyClosesAtMs - 1)).multiplayer.status,
+      "waiting",
+      "new arrivals do not extend the lobby deadline",
+    );
+    const firstNewLobby = await syncFarm(pool, dids[7], lobbyClosesAtMs);
+    assert.equal(firstNewLobby.players.length, 1, "an expired lobby does not admit new arrivals");
+    await Promise.all(dids.slice(0, 7).map(did => syncFarm(pool, did, lobbyClosesAtMs + 1)));
+    assert.equal(
+      (await syncFarm(pool, dids[0], lobbyClosesAtMs + 1)).multiplayer.status,
+      "playing",
+    );
 
     const firstField = await pool.query<{ field_id: string }>(
       "SELECT DISTINCT field_id FROM farm_players WHERE owner_did=ANY($1)",
@@ -277,7 +318,6 @@ test("concurrent arrivals join the same available field", async () => {
     );
     assert.equal(firstField.rowCount, 1, "the existing hogs and concurrent arrivals share one field");
 
-    await Promise.all(dids.slice(7).map(did => syncFarm(pool, did, now + 1)));
     const assignments = await pool.query<{ field_id: string; count: string }>(
       `SELECT field_id, count(*)::text AS count
          FROM farm_players
@@ -286,13 +326,26 @@ test("concurrent arrivals join the same available field", async () => {
         ORDER BY count(*) DESC`,
       [dids],
     );
-    assert.deepEqual(assignments.rows.map(row => Number(row.count)), [8, 1]);
-    assert.equal((await syncFarm(pool, dids[0], now + 2)).players.length, 8);
-    const singleton = await pool.query<{ owner_did: string }>(
-      "SELECT owner_did FROM farm_players WHERE field_id=$1",
-      [assignments.rows.find(row => Number(row.count) === 1)!.field_id],
+    assert.deepEqual(assignments.rows.map(row => Number(row.count)), [7, 1]);
+    assert.equal(
+      (await syncFarm(pool, dids[0], lobbyClosesAtMs + 2)).players.length,
+      7,
     );
-    assert.equal((await syncFarm(pool, singleton.rows[0].owner_did, now + 2)).players.length, 1);
+    const singletonClosesAtMs = firstNewLobby.multiplayer.lobbyClosesAtMs!;
+    await syncFarm(pool, dids[7], singletonClosesAtMs - 15_000);
+    const singletonMatch = await syncFarm(pool, dids[8], singletonClosesAtMs);
+    assert.equal(singletonMatch.players.length, 2);
+    assert.equal(
+      singletonMatch.multiplayer.status,
+      "playing",
+      "an expired singleton admits a second player and starts immediately",
+    );
+
+    await Promise.all(dids.slice(9).map(did => syncFarm(pool, did, singletonClosesAtMs + 1)));
+    const fullLobby = await syncFarm(pool, dids[9], singletonClosesAtMs + 2);
+    assert.equal(fullLobby.players.length, 8);
+    assert.equal(fullLobby.multiplayer.status, "playing", "a full lobby starts before its deadline");
+    assert.equal(fullLobby.multiplayer.lobbyClosesAtMs, null);
   } finally {
     await pool.query("DELETE FROM farm_slop WHERE field_id IN (SELECT field_id FROM farm_players WHERE owner_did=ANY($1))", [dids]);
     await pool.query("DELETE FROM app_sessions WHERE owner_did=ANY($1)", [dids]);
