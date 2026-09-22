@@ -1409,8 +1409,23 @@
 
 @media (prefers-reduced-motion: reduce) {
   .online-dot, .slop-pickup, .effect-bubble, .pixel-hog, .pixel-pop,
-  .battle-effect, .farm-loading, .login-pig, .victory-confetti i { animation: none; }
+  .battle-effect, .farm-loading, .victory-confetti i { animation: none; }
   .battle-effect { display: none; }
+  /* The sign-in hog is a subtle idle animation, not a gameplay effect, so it
+     stays active even when the user prefers reduced motion. */
+  .login-pig {
+    animation:
+      title-hog-antics 8s steps(2, jump-none) infinite,
+      title-hog-glitch 8s steps(2, jump-none) infinite;
+  }
+  .login-bite-effect {
+    display: block;
+    animation: title-bite 8s steps(4, jump-none) infinite;
+  }
+  .login-fart-effect {
+    display: block;
+    animation: title-fart-cloud 8s steps(5, jump-none) infinite;
+  }
 }
 
 @keyframes victory-confetti {
