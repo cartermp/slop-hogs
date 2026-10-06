@@ -1,9 +1,11 @@
 import { timingSafeEqual } from "node:crypto";
 import { NextRequest, NextResponse } from "next/server";
+import { loadCostPolicy } from "@/lib/server/cost-policy";
 import { getDatabase } from "@/lib/server/database";
 import { authenticateGitHubCode, loadGitHubOAuthConfig } from "@/lib/server/github-oauth";
 import { completeGitHubSignIn } from "@/lib/server/hogs";
 import { httpRequestFields, startServerActivity } from "@/lib/server/logging";
+import { LoginRateLimitError, loginSource, reserveLoginAttempt } from "@/lib/server/oauth";
 
 export const runtime = "nodejs";
 
@@ -56,6 +58,12 @@ export async function GET(request: NextRequest) {
     return redirect(config.origin, "/?auth_error=github_login_canceled");
   }
   try {
+    await reserveLoginAttempt(
+      getDatabase(),
+      "github",
+      loginSource(request, config.trustedProxyCount),
+      loadCostPolicy().limits,
+    );
     const identity = await authenticateGitHubCode(config, code);
     const actorDid = `did:github:${identity.id}`;
     event.add({ actor_did: actorDid, actor_handle: identity.login, auth_provider: "github" });
@@ -72,6 +80,10 @@ export async function GET(request: NextRequest) {
     event.emit("success", { http_status: 303, hog_id: appSession.hogId });
     return response;
   } catch (error) {
+    if (error instanceof LoginRateLimitError) {
+      event.emit("rate_limited", { http_status: 303 }, error);
+      return redirect(config.origin, "/?auth_error=login_rate_limited");
+    }
     event.emit("failure", { http_status: 303 }, error);
     return redirect(config.origin, "/?auth_error=github_invalid_callback");
   }

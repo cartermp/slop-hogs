@@ -53,7 +53,12 @@ export async function POST(request: Request) {
     const handle = readLoginInput(await request.text());
     event.add({ actor_handle: handle });
     const policy = loadCostPolicy();
-    await reserveLoginAttempt(getDatabase(), loginSource(request, config.trustedProxyCount), policy.limits);
+    await reserveLoginAttempt(
+      getDatabase(),
+      "bluesky",
+      loginSource(request, config.trustedProxyCount),
+      policy.limits,
+    );
     const client = await getOAuthClient();
     const authorizationUrl = await client.authorize(handle, { state: "/" });
     event.emit("success", { http_status: 303, authorization_host: authorizationUrl.hostname });

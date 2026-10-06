@@ -25,6 +25,7 @@ import {
   previewPost,
 } from "../src/lib/server/posts.ts";
 import { ReadOnlyError } from "../src/lib/server/operations.ts";
+import { LoginRateLimitError, reserveLoginAttempt } from "../src/lib/server/oauth.ts";
 import { prepareBackupRestoreCheck, verifyRestoredBackup } from "../src/lib/server/backup-restore.ts";
 import { deleteTestData, previewTestDataCleanup } from "../src/lib/server/test-data-cleanup.ts";
 
@@ -65,6 +66,17 @@ test("real PostgreSQL persistence, retries, isolation and rollback", async () =>
   const action = { type: "feed", food: "ai_image" };
   try {
     await Promise.all([migrate(pool), migrate(pool)]);
+    const loginSource = `integration-${randomUUID()}`;
+    const loginLimits = { loginAttemptsPerIpPerHour: 5, loginAttemptsGlobalPerHour: 200 };
+    for (let attempt = 0; attempt < 5; attempt += 1) {
+      await reserveLoginAttempt(pool, "bluesky", loginSource, loginLimits);
+    }
+    await reserveLoginAttempt(pool, "github", loginSource, loginLimits);
+    await assert.rejects(
+      reserveLoginAttempt(pool, "bluesky", loginSource, loginLimits),
+      LoginRateLimitError,
+    );
+
     const legacyHog = randomUUID();
     const {
       recentMeals: _recentMeals,
