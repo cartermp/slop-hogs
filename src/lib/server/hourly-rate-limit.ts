@@ -14,6 +14,7 @@ export async function reserveHourlyAttempt(
   namespace: string,
   source: string,
   limits: { perSource: number; global: number },
+  globalNamespace = namespace,
 ): Promise<boolean> {
   const sourceHash = createHash("sha256").update(`${namespace}:${source}`).digest("hex");
   return transaction(pool, async client => {
@@ -36,7 +37,10 @@ export async function reserveHourlyAttempt(
       );
       return result.rows[0].attempts;
     };
-    const global = await increment(namespace === "login" ? "global" : `${namespace}:global`, limits.global);
+    const global = await increment(
+      globalNamespace === "login" ? "global" : `${globalNamespace}:global`,
+      limits.global,
+    );
     const perSource = await increment(sourceHash, limits.perSource);
     return global <= limits.global && perSource <= limits.perSource;
   });

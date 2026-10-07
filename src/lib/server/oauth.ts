@@ -153,12 +153,13 @@ export const loginSource = requestSource;
 
 export async function reserveLoginAttempt(
   pool: Pool,
+  provider: "bluesky" | "github",
   source: string,
   limits: { loginAttemptsPerIpPerHour: number; loginAttemptsGlobalPerHour: number },
 ): Promise<void> {
-  const allowed = await reserveHourlyAttempt(pool, "login", source, {
+  const allowed = await reserveHourlyAttempt(pool, `${provider}-login`, source, {
     perSource: limits.loginAttemptsPerIpPerHour,
     global: limits.loginAttemptsGlobalPerHour,
-  });
+  }, "login");
   if (!allowed) throw new LoginRateLimitError("Too many login attempts");
 }
