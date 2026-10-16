@@ -42,7 +42,6 @@ export default async function Home({
         <p className="pixel-kicker">SLOP SYSTEMS PRESENTS</p>
         <h1>SLOP<br /><span>HOGS</span></h1>
         <p className="battle-royale-callout">HOG BATTLES, SHARED OR SOLO</p>
-        <p className="battle-royale-rules">Bite. Fart. Eat slop. Be the last hog standing.</p>
         <div className="login-hog-stage" aria-hidden="true">
           <div className="login-pig">
             <i className="hog-tail-pixel" />
