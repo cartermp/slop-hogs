@@ -46,7 +46,7 @@ try {
   assert.match(html, /Slop Hogs/);
   assert.match(html, /SLOP SYSTEMS PRESENTS/);
   assert.match(html, /HOG BATTLES, SHARED OR SOLO/);
-  assert.match(html, /Bite\. Fart\. Eat slop\. Be the last hog standing\./);
+  assert.doesNotMatch(html, /Bite\. Fart\. Eat slop\. Be the last hog standing\./);
   assert.match(html, /CHOMP!/);
   assert.match(html, /PFFT!/);
   assert.match(html, /Sign in with Bluesky/);

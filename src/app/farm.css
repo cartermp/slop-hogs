@@ -1218,11 +1218,6 @@
   font: clamp(9px, 2vw, 12px)/1.5 var(--pixel);
   letter-spacing: .08em;
 }
-.battle-royale-rules {
-  margin: 7px 0 0;
-  color: #f0a9c0;
-  font: clamp(16px, 3vw, 21px)/1.2 var(--terminal);
-}
 .login-hog-stage {
   position: relative;
   width: 260px;
